@@ -1,0 +1,475 @@
+---
+title: 'Video Generation'
+description: 'Create realistic avatar videos by combining cloned models with synthesized speech'
+---
+
+## Overview
+
+Duix Avatar's video generation system creates realistic digital human videos by synchronizing avatar models with synthesized or uploaded audio. The system ensures natural lip-syncing, smooth audio-video synchronization, and high-quality output.
+
+<Info>
+Video generation combines your cloned avatar models with voice synthesis to produce fully synchronized digital human videos.
+</Info>
+
+## Video Generation Workflow
+
+The complete process from text to final video:
+
+<Steps>
+  <Step title="Prepare Content">
+    Create or save a video project with model selection, text content, and voice configuration.
+    
+    ```javascript
+    function saveVideo({ id, model_id, name, text_content, voice_id, audio_path }) {
+      const video = selectVideoByID(id)
+      
+      if (video) {
+        return update({ id, model_id, name, text_content, voice_id, audio_path })
+      }
+      return insertVideo({ 
+        model_id, 
+        name, 
+        status: 'draft', 
+        text_content, 
+        voice_id, 
+        audio_path 
+      })
+    }
+    ```
+  </Step>
+
+  <Step title="Generate Audio">
+    The system synthesizes audio from text using the selected voice model, or uses uploaded audio.
+    
+    ```javascript
+    let audioPath
+    if (video.audio_path) {
+      // Use uploaded audio
+      audioPath = video.audio_path
+    } else {
+      // Generate from text using voice synthesis
+      const voice = selectVoiceByID(video.voice_id || model.voice_id)
+      audioPath = await makeAudio4Video({
+        voiceId: voice.id,
+        text: video.text_content
+      })
+    }
+    ```
+  </Step>
+
+  <Step title="Submit Video Task">
+    Submit the video generation task to the Face2Face service.
+    
+    ```javascript
+    const param = {
+      audio_url: audioPath,
+      video_url: model.video_path,
+      code: uuid,
+      chaofen: 0,
+      watermark_switch: 0,
+      pn: 1
+    }
+    const result = await makeVideoApi(param)
+    ```
+  </Step>
+
+  <Step title="Monitor Progress">
+    The system continuously polls for task completion and updates progress.
+    
+    ```javascript
+    const statusRes = await getVideoStatus(video.code)
+    if (statusRes.data.status === 2) {
+      // Video synthesis complete
+      update({
+        id: video.id,
+        status: 'success',
+        file_path: statusRes.data.result,
+        duration: await getVideoDuration(resultPath)
+      })
+    }
+    ```
+  </Step>
+</Steps>
+
+## Creating Videos
+
+### Basic Video Synthesis
+
+```javascript
+/**
+ * Start video synthesis process
+ * @param {number} videoId - Video project ID
+ * @returns {Promise<number>} Video ID
+ */
+export async function synthesisVideo(videoId) {
+  try {
+    update({
+      id: videoId,
+      file_path: null,
+      status: 'pending',
+      message: 'Submitting task',
+    })
+
+    // Get video project data
+    const video = selectVideoByID(videoId)
+    
+    // Get avatar model
+    const model = selectF2FModelByID(video.model_id)
+    
+    // Generate or use existing audio
+    let audioPath
+    if (video.audio_path) {
+      audioPath = video.audio_path
+    } else {
+      const voice = selectVoiceByID(video.voice_id || model.voice_id)
+      audioPath = await makeAudio4Video({
+        voiceId: voice.id,
+        text: video.text_content
+      })
+    }
+    
+    // Call video generation API
+    const { result, param } = await makeVideoByF2F(audioPath, model.video_path)
+    
+    // Update status based on result
+    if (10000 === result.code) {
+      update({
+        id: videoId,
+        status: 'pending',
+        message: result,
+        audio_path: audioPath,
+        param,
+        code: param.code
+      })
+    } else {
+      update({
+        id: videoId,
+        status: 'failed',
+        message: result.msg
+      })
+    }
+  } catch (error) {
+    updateStatus(videoId, 'failed', error.message)
+  }
+  
+  return videoId
+}
+```
+
+## Video Status Management
+
+Video projects progress through several states:
+
+<CardGroup cols={2}>
+  <Card title="Draft" icon="pencil">
+    Initial state when video is created but not submitted
+  </Card>
+  
+  <Card title="Waiting" icon="clock">
+    Queued for processing, waiting for available resources
+  </Card>
+  
+  <Card title="Pending" icon="spinner">
+    Currently being processed by the synthesis engine
+  </Card>
+  
+  <Card title="Success" icon="circle-check">
+    Video generation completed successfully
+  </Card>
+</CardGroup>
+
+### Status Monitoring
+
+```javascript
+/**
+ * Continuously monitor pending video tasks
+ */
+export async function loopPending() {
+  const video = findFirstByStatus('pending')
+  if (!video) {
+    synthesisNext() // Start next waiting task
+    setTimeout(() => loopPending(), 2000)
+    return
+  }
+
+  const statusRes = await getVideoStatus(video.code)
+
+  if ([9999, 10002, 10003].includes(statusRes.code)) {
+    updateStatus(video.id, 'failed', statusRes.msg)
+  } else if (statusRes.code === 10000) {
+    if (statusRes.data.status === 1) {
+      // In progress
+      updateStatus(
+        video.id,
+        'pending',
+        statusRes.data.msg,
+        statusRes.data.progress
+      )
+    } else if (statusRes.data.status === 2) {
+      // Success - get video duration
+      const resultPath = path.join(assetPath.model, statusRes.data.result)
+      const duration = await getVideoDuration(resultPath)
+      
+      update({
+        id: video.id,
+        status: 'success',
+        message: statusRes.data.msg,
+        progress: statusRes.data.progress,
+        file_path: statusRes.data.result,
+        duration
+      })
+    } else if (statusRes.data.status === 3) {
+      updateStatus(video.id, 'failed', statusRes.data.msg)
+    }
+  }
+
+  setTimeout(() => loopPending(), 2000)
+}
+```
+
+## API Integration
+
+The video generation system uses the Face2Face API:
+
+### Submit Video Synthesis
+
+**Endpoint**: `http://127.0.0.1:8383/easy/submit`
+
+**Method**: POST
+
+```json
+{
+  "audio_url": "path/to/audio.wav",
+  "video_url": "path/to/model.mp4",
+  "code": "unique-task-id",
+  "chaofen": 0,
+  "watermark_switch": 0,
+  "pn": 1
+}
+```
+
+**Response**:
+
+```json
+{
+  "code": 10000,
+  "msg": "Task submitted successfully"
+}
+```
+
+<Note>
+The `code` parameter must be a unique identifier (UUID) for tracking the task.
+</Note>
+
+### Query Video Progress
+
+**Endpoint**: `http://127.0.0.1:8383/easy/query?code={taskCode}`
+
+**Method**: GET
+
+**Response**:
+
+```json
+{
+  "code": 10000,
+  "data": {
+    "status": 2,
+    "progress": 100,
+    "msg": "Synthesis complete",
+    "result": "output/video_123.mp4"
+  }
+}
+```
+
+**Status Codes**:
+- `status: 1` - In progress
+- `status: 2` - Success
+- `status: 3` - Failed
+
+## Queue Management
+
+The system automatically manages a queue of video synthesis tasks:
+
+```javascript
+/**
+ * Process next waiting video in queue
+ */
+function synthesisNext() {
+  const video = findFirstByStatus('waiting')
+  if (video) {
+    synthesisVideo(video.id)
+  }
+}
+
+/**
+ * Queue video for synthesis
+ */
+function makeVideo(videoId) {
+  update({ id: videoId, status: 'waiting' })
+  return videoId
+}
+```
+
+<Tip>
+Videos are processed sequentially to optimize GPU resource usage. Check the waiting queue position in the progress field.
+</Tip>
+
+## Video Management
+
+### List Videos with Pagination
+
+```javascript
+function page({ page, pageSize, name = '' }) {
+  const waitingVideos = selectByStatus('waiting').map((v) => v.id)
+  const total = count(name)
+  const list = selectPage({ page, pageSize, name }).map((video) => {
+    video = {
+      ...video,
+      file_path: video.file_path ? path.join(assetPath.model, video.file_path) : video.file_path
+    }
+
+    if (video.status === 'waiting') {
+      video.progress = `${waitingVideos.indexOf(video.id) + 1} / ${waitingVideos.length}`
+    }
+    return video
+  })
+
+  return { total, list }
+}
+```
+
+### Export Generated Video
+
+```javascript
+function exportVideo(videoId, outputPath) {
+  const video = selectVideoByID(videoId)
+  const filePath = path.join(assetPath.model, video.file_path)
+  fs.copyFileSync(filePath, outputPath)
+}
+```
+
+### Delete Video
+
+```javascript
+function removeVideo(videoId) {
+  const video = selectVideoByID(videoId)
+  
+  // Delete video file
+  const videoPath = path.join(assetPath.model, video.file_path || '')
+  if (!isEmpty(video.file_path) && fs.existsSync(videoPath)) {
+    fs.unlinkSync(videoPath)
+  }
+  
+  // Delete audio file
+  const audioPath = path.join(assetPath.model, video.audio_path || '')
+  if (!isEmpty(video.audio_path) && fs.existsSync(audioPath)) {
+    fs.unlinkSync(audioPath)
+  }
+  
+  deleteVideo(videoId)
+}
+```
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Automatic Lip-Sync" icon="comments">
+    Highly synchronized lip movements match audio perfectly for natural results
+  </Card>
+  
+  <Card title="Queue Processing" icon="list-check">
+    Automatic task queue management for efficient GPU utilization
+  </Card>
+  
+  <Card title="Progress Tracking" icon="chart-line">
+    Real-time progress updates during video synthesis
+  </Card>
+  
+  <Card title="Dual Audio Mode" icon="microphone-lines">
+    Use synthesized voice or upload custom audio files
+  </Card>
+</CardGroup>
+
+## Video Specifications
+
+### Input Requirements
+
+- **Avatar Model**: H.264 encoded video from avatar cloning
+- **Audio**: WAV format (synthesized or uploaded)
+- **Text**: UTF-8 encoded text for speech synthesis
+
+### Output Format
+
+- **Container**: MP4
+- **Video Codec**: H.264
+- **Audio**: Synchronized with lip movements
+- **Location**: `D:\duix_avatar_data\model\output`
+
+## Performance Considerations
+
+<Note>
+Video synthesis is GPU-intensive. Processing time depends on video duration and hardware specifications.
+</Note>
+
+### Recommended Hardware
+
+- **GPU**: NVIDIA RTX 4070 or better
+- **RAM**: 32GB minimum
+- **CPU**: Intel Core i5-13400F or equivalent
+- **Storage**: 100GB+ free space
+
+### Optimization Tips
+
+1. **Batch Processing**: Queue multiple videos for continuous processing
+2. **Resource Monitoring**: Monitor GPU usage during synthesis
+3. **Audio Preparation**: Pre-generate audio for faster video processing
+4. **Model Selection**: Use appropriate model quality for your use case
+
+## Error Handling
+
+```javascript
+try {
+  await synthesisVideo(videoId)
+} catch (error) {
+  log.error('Video synthesis error:', error.message)
+  updateStatus(videoId, 'failed', error.message)
+}
+```
+
+Common error codes:
+- `9999`: General error
+- `10002`: Invalid parameters
+- `10003`: Resource unavailable
+- `10000`: Success
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Test First" icon="vial">
+    Use voice audition before generating full videos
+  </Card>
+  
+  <Card title="Monitor Queue" icon="eye">
+    Check waiting position for time estimates
+  </Card>
+  
+  <Card title="Verify Audio" icon="volume-high">
+    Ensure audio quality matches video duration
+  </Card>
+  
+  <Card title="Backup Models" icon="floppy-disk">
+    Keep backups of avatar models and voice data
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Avatar Cloning" href="/features/avatar-cloning">
+    Create new avatar models for video generation
+  </Card>
+  
+  <Card title="Voice Synthesis" href="/features/voice-synthesis">
+    Generate custom audio for your videos
+  </Card>
+</CardGroup>

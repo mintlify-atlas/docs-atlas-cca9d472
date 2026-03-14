@@ -1,0 +1,347 @@
+---
+title: 'Support'
+description: 'Get help and support for Duix Avatar'
+icon: 'life-ring'
+---
+
+## Getting Support
+
+We offer multiple support channels to help you get the most out of Duix Avatar, whether you're using the open-source version or considering our commercial API services.
+
+## Support Channels
+
+<CardGroup cols={2}>
+  <Card title="GitHub Issues" icon="github" href="https://github.com/duixcom/Duix.Avatar/issues">
+    Report bugs, request features, or search existing issues
+  </Card>
+  <Card title="Email Support" icon="envelope" href="mailto:james@duix.com">
+    Direct technical support at james@duix.com
+  </Card>
+  <Card title="Official Website" icon="globe" href="https://www.duix.com">
+    Documentation, demos, and resources
+  </Card>
+  <Card title="API Documentation" icon="code" href="https://docs.duix.com/api-reference/api/Introduction">
+    Enterprise API reference and guides
+  </Card>
+</CardGroup>
+
+## Before Requesting Support
+
+To get the fastest resolution, please complete these steps first:
+
+<Steps>
+  <Step title="Check the FAQ">
+    Visit our [FAQ page](/community/faq) for answers to common questions and troubleshooting steps.
+  </Step>
+
+  <Step title="Verify System Requirements">
+    Ensure your system meets the requirements:
+    - NVIDIA graphics card with drivers installed
+    - Docker services running
+    - Sufficient disk space (100GB+ on C:, 30GB+ on D: for Windows)
+
+    ```bash
+    # Verify GPU
+    nvidia-smi
+    ```
+  </Step>
+
+  <Step title="Update to Latest Version">
+    Make sure you're using the latest version:
+
+    **Server:**
+    ```bash
+    cd /deploy
+    docker-compose up -d
+    ```
+
+    **Client:** Download from [GitHub Releases](https://github.com/duixcom/Duix.Avatar/releases)
+  </Step>
+
+  <Step title="Search Existing Issues">
+    Check if your issue is already reported or resolved in [GitHub Issues](https://github.com/duixcom/Duix.Avatar/issues).
+  </Step>
+</Steps>
+
+## Reporting Issues
+
+When requesting support, provide detailed information:
+
+### Required Information
+
+<AccordionGroup>
+  <Accordion title="Problem Description">
+    Clearly describe:
+    - What you were trying to do
+    - What you expected to happen
+    - What actually happened
+    - Steps to reproduce the issue
+    - Screenshots (if applicable)
+  </Accordion>
+
+  <Accordion title="System Information">
+    Include:
+    - Operating System (e.g., Windows 10, Ubuntu 22.04)
+    - GPU Model (e.g., RTX 4070)
+    - Client Version
+    - Docker service status
+  </Accordion>
+
+  <Accordion title="Error Logs">
+    **Client Logs:**
+
+    ![Client Logs](https://raw.githubusercontent.com/duixcom/Duix.Avatar/main/README.assets/4.jpeg)
+
+    **Server Logs:**
+
+    Click on Docker services in Docker Desktop and copy the logs:
+
+    ![Server Logs](https://raw.githubusercontent.com/duixcom/Duix.Avatar/main/README.assets/15.png)
+  </Accordion>
+</AccordionGroup>
+
+## Support Options: Open Source vs Commercial
+
+<Note>
+  We offer two parallel service solutions to meet different user needs.
+</Note>
+
+### Comparison Table
+
+| Aspect | Open Source Local Deployment | Commercial API Service |
+|--------|------------------------------|------------------------|
+| **Best For** | Technical users with deep learning experience | Business users needing quick integration |
+| **Hardware** | Requires GPU server purchase | No GPU required |
+| **Customization** | Full source code access and modification | API-based extension only |
+| **Support** | Community support | Professional technical response team |
+| **Maintenance** | High maintenance cost | Simple maintenance |
+| **Lip Sync** | Usable effect | Stunning, higher definition |
+| **Updates** | Community-driven | Latest models prioritized, fast fixes |
+| **License** | Free commercial use* | Commercial use allowed |
+
+<Note>
+  *Enterprises with 100,000+ users or $10M+ annual revenue need a commercial license
+</Note>
+
+### When to Choose Open Source
+
+<Card title="Open Source Deployment" icon="code-branch">
+  Choose the open-source version if you:
+  
+  - Have deep learning framework experience
+  - Need full customization and control
+  - Want to participate in community development
+  - Can maintain your own infrastructure
+  - Have budget for GPU hardware
+</Card>
+
+### When to Choose Commercial API
+
+<Card title="Commercial API Service" icon="rocket">
+  Choose the commercial API if you:
+  
+  - Need quick business integration
+  - Want to focus on application development
+  - Require enterprise-level SLA guarantees
+  - Prefer managed infrastructure
+  - Need the latest models and fastest updates
+</Card>
+
+## Community Support
+
+### Open Source Support
+
+<AccordionGroup>
+  <Accordion title="GitHub Issues">
+    The primary channel for open-source support:
+    
+    - Report bugs with detailed reproduction steps
+    - Request new features
+    - Search for solutions to common problems
+    - Help other community members
+
+    Visit: [github.com/duixcom/Duix.Avatar/issues](https://github.com/duixcom/Duix.Avatar/issues)
+  </Accordion>
+
+  <Accordion title="Active Community">
+    The project is newly open-sourced and the community is very active:
+    
+    - Issues are resolved and closed daily
+    - Frequent updates and improvements
+    - Growing contributor base
+
+    <Note>
+      Check GitHub Issues frequently - your problem may already be solved in a recent update!
+    </Note>
+  </Accordion>
+
+  <Accordion title="Email Support">
+    For questions not suitable for public issues, contact:
+    
+    **james@duix.com**
+    
+    Response times may vary depending on volume and complexity.
+  </Accordion>
+</AccordionGroup>
+
+## Enterprise Support
+
+For commercial deployments and enterprise needs:
+
+### API Services
+
+Access professional support through our API platform:
+
+- **Documentation**: [docs.duix.com/api-reference/api/Introduction](https://docs.duix.com/api-reference/api/Introduction)
+- **Features**:
+  - Dynamic scaling support
+  - Professional technical response team
+  - SLA guarantees
+  - Latest models and algorithms
+  - Priority bug fixes
+
+### Commercial Licensing
+
+Request a commercial license if:
+
+- Monthly Active Users > 1,000
+- Total users > 100,000
+- Annual revenue > $10 million USD
+
+Contact: **james@duix.com**
+
+## Interactive Demo
+
+Experience Duix Avatar's capabilities:
+
+<Card title="Try Interactive Digital Human" icon="play" href="https://www.duix.com">
+  Visit the official website to chat with a Duix Avatar digital human in real-time.
+  
+  Note: Real-time interaction is available through the commercial platform. The open-source version focuses on non-real-time video synthesis.
+</Card>
+
+## Technical Resources
+
+### Documentation
+
+- [Installation Guide](/installation/windows) - Setup instructions for Windows and Ubuntu
+- [Quick Start](/quickstart) - Get started with your first avatar
+- [API Reference](/api/introduction) - Local API documentation
+- [FAQ](/community/faq) - Common questions and solutions
+
+### Code Examples
+
+API integration examples are available in the source code:
+
+```bash
+src/main/service/model.js   # Model training
+src/main/service/video.js   # Video synthesis  
+src/main/service/voice.js   # Voice cloning
+```
+
+## Response Times
+
+<Note>
+  **Community Support**: Response times vary based on community availability and issue complexity. Active issues are typically addressed within 1-7 days.
+</Note>
+
+<Note>
+  **Enterprise Support**: Commercial customers receive priority support with guaranteed SLA response times.
+</Note>
+
+## Contributing to Support
+
+Help the community by:
+
+- Answering questions in GitHub Issues
+- Sharing solutions to problems you've solved
+- Improving documentation
+- Contributing code fixes
+
+See our [Contributing Guide](/community/contributing) to get started.
+
+## Supported Platforms
+
+### Operating Systems
+
+- **Windows**: Windows 10 19042.1526 or higher
+- **Linux**: Ubuntu 22.04 (tested), other distributions may work
+
+### Hardware Requirements
+
+**Minimum:**
+- NVIDIA GPU (RTX 4070 or better recommended)
+- 32GB RAM
+- 100GB+ free disk space
+
+**Recommended:**
+- CPU: 13th Gen Intel Core i5-13400F
+- Memory: 32GB
+- GPU: RTX 4070 or RTX 5090
+
+### GPU Support
+
+<AccordionGroup>
+  <Accordion title="Supported GPUs">
+    NVIDIA GPUs with proper drivers:
+    - RTX 50 Series (tested on 5090)
+    - RTX 40 Series (4070 recommended)
+    - RTX 30 Series
+
+    Download drivers: [nvidia.cn/drivers/lookup](https://www.nvidia.cn/drivers/lookup/)
+  </Accordion>
+
+  <Accordion title="GPU Verification">
+    Verify your GPU is detected:
+    ```bash
+    nvidia-smi
+    ```
+
+    This command should display your GPU model, driver version, and CUDA version.
+  </Accordion>
+</AccordionGroup>
+
+## Language Support
+
+Duix Avatar supports scripts in eight languages:
+
+- English
+- Japanese
+- Korean  
+- Chinese
+- French
+- German
+- Arabic
+- Spanish
+
+## Acknowledgments
+
+Duix Avatar is built on excellent open-source technologies:
+
+- **ASR**: Based on [fun-asr](https://github.com/alibaba-damo-academy/FunASR)
+- **TTS**: Based on [fish-speech-ziming](https://github.com/fishaudio/fish-speech)
+
+We're grateful to these projects and the broader open-source community.
+
+## Contact Information
+
+<CardGroup cols={2}>
+  <Card title="Technical Questions" icon="envelope">
+    **Email**: james@duix.com
+  </Card>
+  <Card title="Bug Reports" icon="bug">
+    **GitHub**: [Create an Issue](https://github.com/duixcom/Duix.Avatar/issues)
+  </Card>
+  <Card title="Commercial Inquiries" icon="building">
+    **Email**: james@duix.com
+  </Card>
+  <Card title="General Information" icon="circle-info">
+    **Website**: [www.duix.com](https://www.duix.com)
+  </Card>
+</CardGroup>
+
+---
+
+<Note>
+  We're committed to making digital human technology accessible to everyone. Whether you choose the open-source or commercial path, we're here to help you succeed.
+</Note>

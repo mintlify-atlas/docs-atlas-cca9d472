@@ -1,0 +1,306 @@
+---
+title: 'Docker Setup'
+description: 'Complete guide to setting up Duix Avatar using Docker and Docker Compose'
+---
+
+## Overview
+
+Duix Avatar supports Docker-based rapid deployment for both Windows and Ubuntu 22.04 systems. This guide covers the complete Docker setup process.
+
+## Prerequisites
+
+Before starting the Docker setup, ensure your system meets the requirements:
+
+<CardGroup cols={2}>
+  <Card title="System Requirements" icon="computer" href="/deployment/system-requirements">
+    Check hardware and software requirements
+  </Card>
+  <Card title="NVIDIA Setup" icon="microchip" href="/deployment/nvidia-setup">
+    Install NVIDIA drivers and container toolkit
+  </Card>
+</CardGroup>
+
+## Dependencies
+
+Duix Avatar requires the following:
+
+1. **Node.js 18**
+2. **Docker Images:**
+   - `guiji2025/fun-asr`
+   - `guiji2025/fish-speech-ziming`
+   - `guiji2025/duix.avatar`
+
+<Note>
+The Docker images will be automatically pulled when you run `docker-compose up`. The download consumes approximately **70GB of traffic** and may take around 30 minutes depending on your network speed.
+</Note>
+
+## Windows Docker Installation
+
+<Steps>
+  <Step title="Check WSL Installation">
+    Open PowerShell or Command Prompt and check if WSL is installed:
+    
+    ```bash
+    wsl --list --verbose
+    ```
+    
+    If WSL is already installed, proceed to the next step.
+  </Step>
+  
+  <Step title="Update WSL">
+    Update WSL to the latest version:
+    
+    ```bash
+    wsl --update
+    ```
+  </Step>
+  
+  <Step title="Download Docker Desktop">
+    [Download Docker for Windows](https://www.docker.com/) and choose the appropriate installation package based on your CPU architecture.
+  </Step>
+  
+  <Step title="Install Docker Desktop">
+    Run the installer and follow the installation wizard. When you see the Docker Desktop interface, the installation is successful.
+  </Step>
+  
+  <Step title="First Run Setup">
+    1. Launch Docker Desktop
+    2. Accept the service agreement
+    3. Skip the login prompt (you can use Docker without an account)
+  </Step>
+  
+  <Step title="Configure Docker Data Location (Optional)">
+    If your C Drive has less than 100GB free space:
+    
+    1. Go to Docker Desktop Settings
+    2. Navigate to Resources → Advanced
+    3. Change the disk image location to a drive with more than 100GB free space
+  </Step>
+</Steps>
+
+## Ubuntu Docker Installation
+
+<Steps>
+  <Step title="Check Docker Installation">
+    First, verify if Docker is already installed:
+    
+    ```bash
+    docker --version
+    ```
+    
+    If Docker is installed, skip to the NVIDIA setup.
+  </Step>
+  
+  <Step title="Update Package List">
+    ```bash
+    sudo apt update
+    ```
+  </Step>
+  
+  <Step title="Install Docker">
+    ```bash
+    sudo apt install docker.io
+    ```
+  </Step>
+  
+  <Step title="Install Docker Compose">
+    ```bash
+    sudo apt install docker-compose
+    ```
+  </Step>
+</Steps>
+
+## Server Installation
+
+<Tabs>
+  <Tab title="Windows">
+    <Steps>
+      <Step title="Navigate to Deploy Directory">
+        The `docker-compose.yml` file is located in the `/deploy` directory of the project.
+      </Step>
+      
+      <Step title="Choose Your Version">
+        Duix Avatar offers different deployment configurations:
+        
+        **Full Version (Recommended)**
+        ```bash
+        docker-compose up -d
+        ```
+        
+        **Lite Version (Minimal Services)**
+        ```bash
+        docker-compose -f docker-compose-lite.yml up -d
+        ```
+        
+        **NVIDIA 50 Series GPU**
+        ```bash
+        docker-compose -f docker-compose-5090.yml up -d
+        ```
+      </Step>
+      
+      <Step title="Wait for Download and Startup">
+        <Warning>
+        Be patient! The initial download takes approximately **30 minutes** and consumes about **70GB of traffic**. Make sure you're connected to WiFi or have a stable internet connection.
+        </Warning>
+        
+        The services will automatically start after the images are downloaded.
+      </Step>
+      
+      <Step title="Verify Installation">
+        Open Docker Desktop and check that all services are running:
+        
+        **Full Version:** You should see three services:
+        - `duix-avatar-gen-video`
+        - `duix-avatar-tts`
+        - `duix-avatar-asr`
+        
+        **Lite Version:** You should see one service:
+        - `duix-avatar-gen-video`
+        
+        All services should show a "Running" status.
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab title="Ubuntu">
+    <Steps>
+      <Step title="Navigate to Deploy Directory">
+        ```bash
+        cd /deploy
+        ```
+      </Step>
+      
+      <Step title="Start Docker Services">
+        ```bash
+        docker-compose -f docker-compose-linux.yml up -d
+        ```
+      </Step>
+      
+      <Step title="Verify Installation">
+        Check that all services are running:
+        
+        ```bash
+        docker ps
+        ```
+        
+        You should see three containers:
+        - `duix-avatar-gen-video`
+        - `duix-avatar-tts`
+        - `duix-avatar-asr`
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Docker Compose Configuration
+
+The Docker Compose setup includes three main services:
+
+### Service Overview
+
+<AccordionGroup>
+  <Accordion title="duix-avatar-gen-video (Video Generation)">
+    **Image:** `guiji2025/duix.avatar`
+    
+    **Port:** `8383`
+    
+    **Purpose:** Main video synthesis service that generates avatar videos with lip-sync.
+    
+    **Configuration:**
+    ```yaml
+    volumes:
+      - d:/duix_avatar_data/face2face:/code/data
+    environment:
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+    shm_size: '8g'
+    ```
+  </Accordion>
+  
+  <Accordion title="duix-avatar-tts (Text-to-Speech)">
+    **Image:** `guiji2025/fish-speech-ziming`
+    
+    **Port:** `18180`
+    
+    **Purpose:** Voice cloning and text-to-speech synthesis service.
+    
+    **Configuration:**
+    ```yaml
+    volumes:
+      - d:/duix_avatar_data/voice/data:/code/data
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0
+      - NVIDIA_DRIVER_CAPABILITIES=compute,graphics,utility,video,display
+    ```
+  </Accordion>
+  
+  <Accordion title="duix-avatar-asr (Speech Recognition)">
+    **Image:** `guiji2025/fun-asr`
+    
+    **Port:** `10095`
+    
+    **Purpose:** Automatic speech recognition for audio processing.
+    
+    **Configuration:**
+    ```yaml
+    working_dir: /workspace/FunASR/runtime
+    command: sh /run.sh
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Data Volumes
+
+<Warning>
+For Windows installations, ensure you have a **D Drive** with at least **30GB of free space** for storing digital human and project data.
+</Warning>
+
+The Docker setup automatically creates the following data directories:
+
+- **Windows:**
+  - `d:/duix_avatar_data/face2face` - Video models and generated content
+  - `d:/duix_avatar_data/voice/data` - Voice training data and audio files
+
+- **Linux:**
+  - `~/duix_avatar_data/face2face` - Video models and generated content
+  - `~/duix_avatar_data/voice/data` - Voice training data and audio files
+
+## Updating Services
+
+To update to the latest version:
+
+<CodeGroup>
+```bash Windows
+cd /deploy
+docker-compose pull
+docker-compose up -d
+```
+
+```bash Ubuntu
+cd /deploy
+docker-compose -f docker-compose-linux.yml pull
+docker-compose -f docker-compose-linux.yml up -d
+```
+</CodeGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Install Client Application" icon="download">
+    Download and install the Duix Avatar client from [GitHub Releases](https://github.com/duixcom/Duix.Avatar/releases)
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/deployment/troubleshooting">
+    Having issues? Check common problems and solutions
+  </Card>
+</CardGroup>
+
+## API Endpoints
+
+Once Docker services are running, the following APIs are available locally:
+
+- **Video Synthesis:** `http://127.0.0.1:8383/easy/submit`
+- **Audio Synthesis:** `http://127.0.0.1:18180/v1/invoke`
+- **Speech Recognition:** `http://127.0.0.1:10095`
+
+<Note>
+For detailed API usage, refer to the [API Reference](/api/introduction) section.
+</Note>

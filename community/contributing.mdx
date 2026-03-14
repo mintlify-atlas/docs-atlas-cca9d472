@@ -1,0 +1,299 @@
+---
+title: 'Contributing Guide'
+description: 'How to contribute to the Duix Avatar open-source project'
+icon: 'code-pull-request'
+---
+
+## Welcome Contributors!
+
+Duix Avatar is a truly open-source AI avatar toolkit, and we welcome contributions from the community. Whether you're fixing bugs, adding features, improving documentation, or sharing your experience, your contributions help make this project better for everyone.
+
+## Our Vision
+
+Seven years ago, a group of young pioneers chose an unconventional technical path, developing a method to train digital human models using real-person video data. Our commitment remains: **breaking down technological barriers to make cutting-edge tools available to all**.
+
+By contributing to Duix Avatar, you're helping democratize digital human creation technology.
+
+## Ways to Contribute
+
+<CardGroup cols={2}>
+  <Card title="Report Bugs" icon="bug">
+    Found a bug? Help us improve by reporting it on GitHub Issues with detailed reproduction steps.
+  </Card>
+  <Card title="Suggest Features" icon="lightbulb">
+    Have an idea for a new feature? Share it with the community through GitHub Discussions.
+  </Card>
+  <Card title="Submit Code" icon="code">
+    Fix bugs, add features, or improve performance by submitting pull requests.
+  </Card>
+  <Card title="Improve Docs" icon="book">
+    Help others by improving documentation, tutorials, and examples.
+  </Card>
+</CardGroup>
+
+## Before You Contribute
+
+### Self-Check Guidelines
+
+Before opening an issue or pull request:
+
+<AccordionGroup>
+  <Accordion title="1. Search Existing Issues">
+    Check if your issue or feature request already exists in [GitHub Issues](https://github.com/duixcom/Duix.Avatar/issues).
+
+    The community is very active, and your concern might already be addressed or in progress.
+  </Accordion>
+
+  <Accordion title="2. Use the Latest Version">
+    Ensure you're using the latest version of both server and client:
+
+    **Update Server:**
+    ```bash
+    cd /deploy
+    docker-compose up -d
+    ```
+
+    **Update Client:**
+    Download from [GitHub Releases](https://github.com/duixcom/Duix.Avatar/releases)
+  </Accordion>
+
+  <Accordion title="3. Test Your Environment">
+    Verify your environment meets the requirements:
+
+    - NVIDIA graphics card with proper drivers installed
+    - All three Docker services running
+    - Sufficient disk space (100GB+ on C:, 30GB+ on D: for Windows)
+
+    ```bash
+    # Verify GPU drivers
+    nvidia-smi
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Reporting Issues
+
+When reporting a bug, please use this template:
+
+### Issue Template
+
+```markdown
+## Problem Description
+
+[Describe the issue in detail]
+
+### Steps to Reproduce
+
+1. [First step]
+2. [Second step]
+3. [And so on...]
+
+### Expected Behavior
+
+[What you expected to happen]
+
+### Actual Behavior
+
+[What actually happened]
+
+### Screenshots
+
+[If applicable, add screenshots]
+
+## Environment
+
+- **OS**: [e.g., Windows 10, Ubuntu 22.04]
+- **GPU**: [e.g., RTX 4070]
+- **Client Version**: [e.g., v1.0.0]
+- **Docker Services**: [Running/Not Running]
+
+## Error Logs
+
+### Client Logs
+
+[Paste client logs here]
+
+### Server Logs
+
+[Paste Docker service logs here]
+```
+
+<Note>
+  **Getting Logs:**
+  - **Client Logs**: Available in the application settings
+  - **Server Logs**: Click on Docker services in Docker Desktop and copy logs
+</Note>
+
+## Contributing Code
+
+### Development Setup
+
+<Steps>
+  <Step title="Fork the Repository">
+    Fork the [Duix Avatar repository](https://github.com/duixcom/Duix.Avatar) to your GitHub account.
+  </Step>
+
+  <Step title="Clone Your Fork">
+    ```bash
+    git clone https://github.com/YOUR_USERNAME/Duix.Avatar.git
+    cd Duix.Avatar
+    ```
+  </Step>
+
+  <Step title="Install Dependencies">
+    Ensure you have Node.js 18 installed:
+    ```bash
+    node --version  # Should be v18.x
+    npm install
+    ```
+  </Step>
+
+  <Step title="Set Up Docker Services">
+    Pull the required Docker images:
+    ```bash
+    docker pull guiji2025/fun-asr
+    docker pull guiji2025/fish-speech-ziming
+    docker pull guiji2025/duix.avatar
+    ```
+
+    Start services:
+    ```bash
+    cd deploy
+    docker-compose up -d
+    ```
+  </Step>
+
+  <Step title="Create a Branch">
+    ```bash
+    git checkout -b feature/your-feature-name
+    ```
+  </Step>
+</Steps>
+
+### Code Style
+
+- Follow existing code patterns and conventions
+- Write clear, descriptive commit messages
+- Add comments for complex logic
+- Test your changes thoroughly before submitting
+
+### API Integration
+
+When working with APIs, refer to these core service files:
+
+```bash
+src/main/service/model.js   # Model training API
+src/main/service/video.js   # Video synthesis API
+src/main/service/voice.js   # Voice cloning API
+```
+
+### Submitting Pull Requests
+
+<Steps>
+  <Step title="Commit Your Changes">
+    ```bash
+    git add .
+    git commit -m "feat: add amazing new feature"
+    ```
+
+    Use conventional commit messages:
+    - `feat:` for new features
+    - `fix:` for bug fixes
+    - `docs:` for documentation
+    - `refactor:` for code refactoring
+  </Step>
+
+  <Step title="Push to Your Fork">
+    ```bash
+    git push origin feature/your-feature-name
+    ```
+  </Step>
+
+  <Step title="Create Pull Request">
+    1. Go to the original repository
+    2. Click "New Pull Request"
+    3. Select your fork and branch
+    4. Fill in the PR template with details
+    5. Submit the pull request
+  </Step>
+</Steps>
+
+## License Compliance
+
+<Note>
+  By contributing to Duix Avatar, you agree that your contributions will be licensed under the DUIX.COM Community License.
+</Note>
+
+Key license requirements:
+
+- **Free for most users**: Commercial use is free for products with fewer than 1,000 Monthly Active Users
+- **Attribution required**: Display "Built with DUIX.COM" in documentation or UI
+- **License inclusion**: Include license notice in distributions
+
+Full license details: [DUIX.COM Community License](https://github.com/duixcom/Duix.Avatar/blob/main/LICENSE)
+
+### Commercial Licensing
+
+If your product has:
+- More than 1,000 Monthly Active Users, OR
+- More than 100,000 total users, OR  
+- Annual revenue exceeding $10 million USD
+
+You must request a commercial license from DUIX.COM.
+
+## Code of Conduct
+
+### Our Standards
+
+- **Be respectful**: Treat all community members with respect and kindness
+- **Be constructive**: Provide helpful feedback and suggestions
+- **Be collaborative**: Work together to solve problems
+- **Be patient**: Remember that contributors have varying experience levels
+
+### Enforcement
+
+Instances of unacceptable behavior may be reported to **james@duix.com**. All complaints will be reviewed and investigated.
+
+## Community Resources
+
+<CardGroup cols={2}>
+  <Card title="GitHub Repository" icon="github" href="https://github.com/duixcom/Duix.Avatar">
+    Source code, issues, and discussions
+  </Card>
+  <Card title="Official Website" icon="globe" href="https://www.duix.com">
+    Try the interactive digital human demo
+  </Card>
+  <Card title="API Documentation" icon="code" href="https://docs.duix.com/api-reference/api/Introduction">
+    Enterprise API services
+  </Card>
+  <Card title="Email Support" icon="envelope" href="mailto:james@duix.com">
+    Direct technical support
+  </Card>
+</CardGroup>
+
+## Recognition
+
+Contributors are recognized in several ways:
+
+- Listed in GitHub contributors
+- Mentioned in release notes for significant contributions
+- Featured in community showcases (with permission)
+
+## Acknowledgments
+
+Duix Avatar is built on amazing open-source projects:
+
+- **ASR**: Based on [fun-asr](https://github.com/alibaba-damo-academy/FunASR)
+- **TTS**: Based on [fish-speech-ziming](https://github.com/fishaudio/fish-speech)
+
+We're grateful to these projects and their contributors.
+
+## Questions?
+
+If you have questions about contributing:
+
+1. Check the [FAQ](/community/faq) for common questions
+2. Search [GitHub Issues](https://github.com/duixcom/Duix.Avatar/issues)
+3. Contact us at **james@duix.com**
+
+Thank you for contributing to Duix Avatar! Together, we're democratizing digital human technology.

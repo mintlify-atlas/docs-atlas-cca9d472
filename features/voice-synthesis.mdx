@@ -1,0 +1,318 @@
+---
+title: 'Voice Synthesis'
+description: 'Generate natural speech from text using AI-powered voice cloning and synthesis technology'
+---
+
+## Overview
+
+Duix Avatar's voice synthesis system converts text into natural, fluent speech using cloned voice models. The technology captures and reproduces subtle vocal characteristics including context, intonation, speed, and other aspects of human speech.
+
+<Info>
+Voice synthesis uses the Fish Speech TTS engine to generate highly realistic speech from your cloned voice models.
+</Info>
+
+## Voice Training Process
+
+The voice training system preprocesses audio and creates a voice model:
+
+<Steps>
+  <Step title="Audio Preprocessing">
+    The system analyzes the reference audio and extracts vocal characteristics.
+    
+    ```javascript
+    // Preprocess and train voice model
+    export async function train(path, lang = 'zh') {
+      path = path.replace(/\\/g, '/') // Normalize path separators
+      const res = await preprocessAndTran({
+        format: path.split('.').pop(),
+        reference_audio: path,
+        lang
+      })
+      return res
+    }
+    ```
+  </Step>
+
+  <Step title="Voice Model Creation">
+    The system generates ASR-formatted audio and reference text for synthesis.
+    
+    ```javascript
+    if (res.code !== 0) {
+      return false
+    } else {
+      const { asr_format_audio_url, reference_audio_text } = res
+      return insert({ 
+        origin_audio_path: path, 
+        lang, 
+        asr_format_audio_url, 
+        reference_audio_text 
+      })
+    }
+    ```
+  </Step>
+
+  <Step title="Model Storage">
+    Voice models are stored with metadata for efficient retrieval during synthesis.
+  </Step>
+</Steps>
+
+## Generating Speech
+
+Convert text to speech using a trained voice model:
+
+```javascript
+/**
+ * Generate audio from text using voice model
+ * @param {string} voiceId - ID of the trained voice model
+ * @param {string} text - Text content to synthesize
+ * @param {string} targetDir - Directory to save generated audio
+ * @returns {Promise<string>} Generated audio filename
+ */
+export async function makeAudio({voiceId, text, targetDir}) {
+  const uuid = crypto.randomUUID()
+  const voice = selectByID(voiceId)
+
+  return makeAudioApi({
+    speaker: uuid,
+    text,
+    format: 'wav',
+    topP: 0.7,
+    max_new_tokens: 1024,
+    chunk_length: 100,
+    repetition_penalty: 1.2,
+    temperature: 0.7,
+    need_asr: false,
+    streaming: false,
+    is_fixed_seed: 0,
+    is_norm: 1,
+    reference_audio: voice.asr_format_audio_url,
+    reference_text: voice.reference_audio_text
+  })
+    .then((res) => {
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true })
+      }
+      fs.writeFileSync(path.join(targetDir, `${uuid}.wav`), res, 'binary')
+      return `${uuid}.wav`
+    })
+}
+```
+
+## Synthesis Parameters
+
+The voice synthesis API accepts the following parameters for fine-tuning output:
+
+<CardGroup cols={2}>
+  <Card title="Temperature" icon="temperature-half">
+    Controls randomness in generation (0.7)
+    
+    Lower values = more consistent, higher values = more varied
+  </Card>
+  
+  <Card title="Top P" icon="filter">
+    Nucleus sampling parameter (0.7)
+    
+    Controls diversity of word selection
+  </Card>
+  
+  <Card title="Repetition Penalty" icon="repeat">
+    Reduces repetitive phrases (1.2)
+    
+    Higher values decrease repetition
+  </Card>
+  
+  <Card title="Max Tokens" icon="coins">
+    Maximum output length (1024)
+    
+    Limits the generated audio duration
+  </Card>
+</CardGroup>
+
+## API Endpoint
+
+The TTS service exposes a REST API for voice synthesis:
+
+### Audio Synthesis Request
+
+**Endpoint**: `http://127.0.0.1:18180/v1/invoke`
+
+**Method**: POST
+
+```json
+{
+  "speaker": "{uuid}",
+  "text": "Your text content here",
+  "format": "wav",
+  "topP": 0.7,
+  "max_new_tokens": 1024,
+  "chunk_length": 100,
+  "repetition_penalty": 1.2,
+  "temperature": 0.7,
+  "need_asr": false,
+  "streaming": false,
+  "is_fixed_seed": 0,
+  "is_norm": 1,
+  "reference_audio": "{voice.asr_format_audio_url}",
+  "reference_text": "{voice.reference_audio_text}"
+}
+```
+
+<Note>
+The `reference_audio` and `reference_text` values are obtained from the voice training process.
+</Note>
+
+### Training Request
+
+**Endpoint**: `http://127.0.0.1:18180/v1/preprocess_and_tran`
+
+**Method**: POST
+
+```json
+{
+  "format": "wav",
+  "reference_audio": "origin_audio/sample.wav",
+  "lang": "zh"
+}
+```
+
+**Response**:
+
+```json
+{
+  "code": 0,
+  "asr_format_audio_url": "processed/audio.wav",
+  "reference_audio_text": "Transcribed text content"
+}
+```
+
+## Voice Audition
+
+Test your voice models before generating final content:
+
+```javascript
+/**
+ * Preview audio generation with voice model
+ * @param {string} voiceId - Voice model ID
+ * @param {string} text - Sample text to synthesize
+ * @returns {Promise<string>} Path to temporary audio file
+ */
+export async function audition(voiceId, text) {
+  const tmpDir = require('os').tmpdir()
+  const audioPath = await makeAudio({ 
+    voiceId, 
+    text, 
+    targetDir: tmpDir 
+  })
+  return path.join(tmpDir, audioPath)
+}
+```
+
+<Tip>
+Use the audition feature to test different text inputs and verify voice quality before generating final videos.
+</Tip>
+
+## Video Integration
+
+Generate audio specifically for video synthesis:
+
+```javascript
+// Generate audio for video production
+export function makeAudio4Video({voiceId, text}) {
+  return makeAudio({
+    voiceId, 
+    text, 
+    targetDir: assetPath.ttsProduct
+  })
+}
+
+// Copy existing audio for video use
+export function copyAudio4Video(filePath) {
+  const targetDir = assetPath.ttsProduct
+  const fileName = dayjs().format('YYYYMMDDHHmmssSSS') + path.extname(filePath)
+  const targetPath = path.join(targetDir, fileName)
+  fs.copyFileSync(filePath, targetPath)
+  return fileName
+}
+```
+
+## Supported Languages
+
+The voice synthesis system supports multiple languages for training and generation:
+
+- Chinese (`zh`)
+- English (`en`)
+- Japanese (`ja`)
+- Korean (`ko`)
+- French (`fr`)
+- German (`de`)
+- Arabic (`ar`)
+- Spanish (`es`)
+
+<Note>
+Language is specified during the voice training process and affects speech recognition and synthesis quality.
+</Note>
+
+## Managing Voice Models
+
+### Retrieve All Voice Models
+
+```javascript
+// Get all available voice timbres
+export function getAllTimbre() {
+  return selectAll()
+}
+```
+
+### Query Specific Voice Model
+
+```javascript
+// Get voice model by ID
+const voice = selectVoiceByID(voiceId)
+console.log({
+  origin_audio_path: voice.origin_audio_path,
+  lang: voice.lang,
+  asr_format_audio_url: voice.asr_format_audio_url,
+  reference_audio_text: voice.reference_audio_text
+})
+```
+
+## Output Format
+
+Generated audio files are saved in WAV format with the following characteristics:
+
+- **Format**: WAV (uncompressed)
+- **Encoding**: Binary
+- **Naming**: UUID-based filenames (e.g., `a1b2c3d4-e5f6.wav`)
+- **Location**: Configured target directory
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Text Quality" icon="file-lines">
+    Use proper punctuation and formatting for natural speech rhythm and pacing
+  </Card>
+  
+  <Card title="Testing" icon="flask">
+    Always audition voice output before generating final videos
+  </Card>
+  
+  <Card title="Model Selection" icon="user-check">
+    Choose voice models that match your content's tone and style
+  </Card>
+  
+  <Card title="Parameter Tuning" icon="sliders">
+    Adjust temperature and repetition penalty for optimal results
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Avatar Cloning" href="/features/avatar-cloning">
+    Learn how to create voice models from video
+  </Card>
+  
+  <Card title="Video Generation" href="/features/video-generation">
+    Combine synthesized audio with avatar videos
+  </Card>
+</CardGroup>

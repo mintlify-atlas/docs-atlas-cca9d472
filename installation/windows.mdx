@@ -1,0 +1,424 @@
+---
+title: 'Windows Installation'
+description: 'Complete installation guide for Duix Avatar on Windows 10 and above'
+---
+
+## System Requirements
+
+<Warning>
+  Ensure your system meets all requirements before proceeding with installation.
+</Warning>
+
+### Operating System
+
+- Windows 10 version 19042.1526 or higher
+- Windows 11 (all versions)
+
+### Hardware Requirements
+
+<CardGroup cols={2}>
+  <Card title="Minimum Storage" icon="hard-drive">
+    **D Drive**: 30GB+ free space (stores avatar and project data)
+    
+    **C Drive**: 100GB+ free space (stores Docker images)
+    
+    If C drive has less than 100GB, you can configure Docker to use another drive after installation.
+  </Card>
+  
+  <Card title="Recommended Specs" icon="microchip">
+    **CPU**: 13th Gen Intel Core i5-13400F
+    
+    **Memory**: 32GB RAM
+    
+    **GPU**: NVIDIA RTX 4070 or better
+  </Card>
+</CardGroup>
+
+<Note>
+  An NVIDIA graphics card with properly installed drivers is **mandatory**. AMD or Intel GPUs are not supported.
+</Note>
+
+## Installation Process
+
+Follow these steps carefully to install Duix Avatar on Windows:
+
+<Steps>
+  <Step title="Install NVIDIA Drivers">
+    If you haven't already installed NVIDIA drivers:
+    
+    1. Visit the [NVIDIA Driver Downloads page](https://www.nvidia.cn/drivers/lookup/)
+    2. Select your graphics card model
+    3. Download and install the latest driver
+    4. Restart your computer
+    
+    **Verify Installation:**
+    
+    ```bash
+    nvidia-smi
+    ```
+    
+    You should see your GPU information displayed. If this command fails, drivers are not properly installed.
+  </Step>
+
+  <Step title="Verify WSL Installation">
+    Windows Subsystem for Linux (WSL) is required for Docker.
+    
+    Open PowerShell or Command Prompt and run:
+    
+    ```bash
+    wsl --list --verbose
+    ```
+    
+    **If WSL is already installed**, you'll see a list of installed distributions. Proceed to update WSL:
+    
+    ```bash
+    wsl --update
+    ```
+    
+    **If WSL is not installed**, enable it with:
+    
+    ```bash
+    wsl --install
+    ```
+    
+    <Note>
+      You may need to restart your computer after installing WSL.
+    </Note>
+  </Step>
+
+  <Step title="Install Docker Desktop">
+    Docker is the core platform for running Duix Avatar services.
+    
+    1. **Download Docker Desktop**
+       
+       Visit [Docker Desktop for Windows](https://www.docker.com/) and download the installer
+       
+       Choose the appropriate version for your CPU architecture (Intel/AMD x64 or ARM)
+    
+    2. **Run the Installer**
+       
+       - Double-click `Docker Desktop Installer.exe`
+       - Follow the installation wizard
+       - Accept the service agreement
+    
+    3. **First Launch**
+       
+       - Launch Docker Desktop
+       - Accept the Docker Subscription Service Agreement
+       - **Skip the login** - you don't need a Docker account
+       - Wait for Docker to start (whale icon in system tray should be steady)
+    
+    <Warning>
+      Do not close Docker Desktop during the Duix Avatar installation process.
+    </Warning>
+  </Step>
+
+  <Step title="Configure Docker Storage (Optional)">
+    If your C drive has less than 100GB free space:
+    
+    1. Open Docker Desktop
+    2. Go to **Settings** → **Resources** → **Advanced**
+    3. Change the "Disk image location" to a drive with more space
+    4. Click "Apply & Restart"
+    
+    <Note>
+      This step is optional but recommended if you have limited C drive space.
+    </Note>
+  </Step>
+
+  <Step title="Install Node.js 18">
+    The Duix Avatar client requires Node.js 18.
+    
+    1. Download Node.js 18 LTS from [nodejs.org](https://nodejs.org/)
+    2. Run the installer and follow the prompts
+    3. Verify installation:
+    
+    ```bash
+    node --version
+    # Should show v18.x.x
+    ```
+  </Step>
+
+  <Step title="Download Docker Images">
+    Duix Avatar consists of three Docker services. Pull all required images:
+    
+    <CodeGroup>
+    ```bash PowerShell
+    # Open PowerShell and run these commands
+    docker pull guiji2025/fun-asr
+    docker pull guiji2025/fish-speech-ziming
+    docker pull guiji2025/duix.avatar
+    ```
+    
+    ```bash Command Prompt
+    # Or use Command Prompt
+    docker pull guiji2025/fun-asr
+    docker pull guiji2025/fish-speech-ziming
+    docker pull guiji2025/duix.avatar
+    ```
+    </CodeGroup>
+    
+    <Warning>
+      This download is approximately **70GB** and may take 30+ minutes depending on your internet speed. Ensure you're on a stable WiFi connection.
+    </Warning>
+  </Step>
+
+  <Step title="Clone or Download Source Code">
+    Get the Duix Avatar repository:
+    
+    **Option 1: Using Git**
+    ```bash
+    git clone https://github.com/duixcom/Duix.Avatar.git
+    cd Duix.Avatar
+    ```
+    
+    **Option 2: Download ZIP**
+    - Visit [github.com/duixcom/Duix.Avatar](https://github.com/duixcom/Duix.Avatar)
+    - Click "Code" → "Download ZIP"
+    - Extract the ZIP file
+  </Step>
+
+  <Step title="Start Docker Services">
+    Navigate to the deploy directory and start the services:
+    
+    ```bash
+    cd deploy
+    docker-compose up -d
+    ```
+    
+    **For Lite Version** (single service, lighter resource usage):
+    ```bash
+    docker-compose -f docker-compose-lite.yml up -d
+    ```
+    
+    **For NVIDIA 50 Series GPUs** (5090, 5080, etc.):
+    ```bash
+    docker-compose -f docker-compose-5090.yml up -d
+    ```
+    
+    <Note>
+      The first startup may take several minutes as services initialize. Be patient!
+    </Note>
+  </Step>
+
+  <Step title="Verify Services">
+    Open Docker Desktop and check that services are running:
+    
+    **Full Version - Three Services:**
+    - `duix-avatar-tts` (Port 18180)
+    - `duix-avatar-asr` (Port 10095)
+    - `duix-avatar-gen-video` (Port 8383)
+    
+    **Lite Version - One Service:**
+    - `duix-avatar-gen-video` (Port 8383)
+    
+    All services should show "Running" status with a green indicator.
+  </Step>
+
+  <Step title="Install Desktop Client">
+    Download and install the Windows client application:
+    
+    1. Visit [Duix Avatar Releases](https://github.com/duixcom/Duix.Avatar/releases)
+    2. Download the latest `Duix.Avatar-x.x.x-setup.exe`
+    3. Double-click the installer
+    4. Follow the installation wizard
+    5. Launch Duix Avatar from the Start Menu or desktop shortcut
+  </Step>
+</Steps>
+
+## Configuration
+
+### Docker Compose Configuration
+
+The `docker-compose.yml` file contains the following services:
+
+```yaml
+services:
+  duix-avatar-tts:
+    image: guiji2025/fish-speech-ziming
+    ports:
+      - '18180:8080'
+    volumes:
+      - d:/duix_avatar_data/voice/data:/code/data
+
+  duix-avatar-asr:
+    image: guiji2025/fun-asr
+    ports:
+      - '10095:10095'
+
+  duix-avatar-gen-video:
+    image: guiji2025/duix.avatar
+    ports:
+      - '8383:8383'
+    volumes:
+      - d:/duix_avatar_data/face2face:/code/data
+```
+
+<Note>
+  Data is stored in `D:/duix_avatar_data/`. Ensure your D drive exists and has sufficient space.
+</Note>
+
+## Troubleshooting
+
+### Docker Services Won't Start
+
+<AccordionGroup>
+  <Accordion title="Error: 'nvidia' runtime not found">
+    This means Docker doesn't have GPU access.
+    
+    **Solution:**
+    1. Ensure NVIDIA drivers are installed (`nvidia-smi` should work)
+    2. Restart Docker Desktop
+    3. Try starting services again
+  </Accordion>
+  
+  <Accordion title="Port already in use">
+    Another application is using the required ports.
+    
+    **Solution:**
+    1. Check what's using the port:
+       ```bash
+       netstat -ano | findstr :8383
+       netstat -ano | findstr :18180
+       netstat -ano | findstr :10095
+       ```
+    2. Stop the conflicting application or change ports in `docker-compose.yml`
+  </Accordion>
+  
+  <Accordion title="Services stuck in 'Starting' status">
+    Services may be initializing or have insufficient resources.
+    
+    **Solution:**
+    1. Wait 5-10 minutes for initialization
+    2. Check Docker logs by clicking on the service in Docker Desktop
+    3. Ensure you have 32GB RAM and sufficient GPU memory
+    4. Try the lite version if resources are limited
+  </Accordion>
+</AccordionGroup>
+
+### WSL Issues
+
+<AccordionGroup>
+  <Accordion title="WSL command not found">
+    WSL needs to be enabled in Windows features.
+    
+    **Solution:**
+    1. Open "Turn Windows features on or off"
+    2. Enable "Windows Subsystem for Linux"
+    3. Enable "Virtual Machine Platform"
+    4. Restart your computer
+  </Accordion>
+  
+  <Accordion title="WSL 2 installation failed">
+    May need to update the WSL kernel.
+    
+    **Solution:**
+    Download and install the [WSL2 Linux kernel update package](https://aka.ms/wsl2kernel)
+  </Accordion>
+</AccordionGroup>
+
+### Client Issues
+
+<AccordionGroup>
+  <Accordion title="Client won't connect to server">
+    Verify services are running and accessible.
+    
+    **Solution:**
+    1. Check Docker Desktop - all services should be "Running"
+    2. Test API endpoints:
+       ```bash
+       curl http://127.0.0.1:8383
+       curl http://127.0.0.1:18180
+       curl http://127.0.0.1:10095
+       ```
+    3. Restart Docker services:
+       ```bash
+       docker-compose down
+       docker-compose up -d
+       ```
+  </Accordion>
+  
+  <Accordion title="Installation hangs or fails">
+    May be antivirus or permissions issues.
+    
+    **Solution:**
+    1. Run installer as Administrator
+    2. Temporarily disable antivirus
+    3. Check Windows Event Viewer for errors
+  </Accordion>
+</AccordionGroup>
+
+## Performance Optimization
+
+### GPU Memory Optimization
+
+If you experience out-of-memory errors:
+
+```yaml
+environment:
+  - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+```
+
+This is already configured in the default `docker-compose.yml`.
+
+### Shared Memory
+
+The video generation service uses 8GB of shared memory:
+
+```yaml
+shm_size: '8g'
+```
+
+If you have limited RAM, you can reduce this, but it may impact performance.
+
+## Updating
+
+To update to the latest version:
+
+<Steps>
+  <Step title="Update Docker Images">
+    ```bash
+    docker pull guiji2025/fun-asr
+    docker pull guiji2025/fish-speech-ziming
+    docker pull guiji2025/duix.avatar
+    ```
+  </Step>
+  
+  <Step title="Restart Services">
+    ```bash
+    cd deploy
+    docker-compose down
+    docker-compose up -d
+    ```
+  </Step>
+  
+  <Step title="Update Client">
+    Download and install the latest client from [GitHub Releases](https://github.com/duixcom/Duix.Avatar/releases)
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Learn how to create your first AI avatar video
+  </Card>
+  
+  <Card title="API Documentation" icon="code">
+    Integrate Duix Avatar into your applications
+  </Card>
+</CardGroup>
+
+## Getting Help
+
+Before asking for help, please:
+
+1. **Check all services are running** in Docker Desktop
+2. **Verify NVIDIA drivers** with `nvidia-smi`
+3. **Update to latest versions** of both server and client
+4. **Search existing issues** on [GitHub](https://github.com/duixcom/Duix.Avatar/issues)
+
+If you still need help:
+- Create a detailed issue on GitHub with logs
+- Contact support: james@duix.com
+- Include your system specs and error messages

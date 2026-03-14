@@ -1,0 +1,330 @@
+---
+title: 'System Requirements'
+description: 'Hardware and software requirements for running Duix Avatar locally'
+---
+
+## Operating System Requirements
+
+Duix Avatar supports two deployment modes:
+
+<CardGroup cols={2}>
+  <Card title="Windows" icon="windows">
+    Windows 10 build 19042.1526 or higher
+  </Card>
+  <Card title="Linux" icon="linux">
+    Ubuntu 22.04 Desktop (kernel 6.8.0-52-generic)
+  </Card>
+</CardGroup>
+
+<Note>
+Ubuntu 22.04 has been fully tested and verified. Other Linux distributions may work but have not been officially tested.
+</Note>
+
+## Hardware Requirements
+
+### Minimum Configuration
+
+<Warning>
+Duix Avatar **requires an NVIDIA GPU** for operation. The services will not start without proper NVIDIA graphics card and drivers.
+</Warning>
+
+| Component | Requirement |
+|-----------|-------------|
+| **CPU** | Modern multi-core processor |
+| **Memory** | 32GB RAM (necessary) |
+| **GPU** | NVIDIA RTX series (30, 40, or 50 series) |
+| **Storage** | 100GB+ free space |
+
+### Recommended Configuration
+
+For optimal performance, we recommend:
+
+| Component | Specification |
+|-----------|---------------|
+| **CPU** | 13th Gen Intel Core i5-13400F or better |
+| **Memory** | 32GB DDR4/DDR5 |
+| **GPU** | NVIDIA RTX 4070 or higher |
+| **Storage (Total)** | 130GB+ free space |
+
+### Storage Breakdown
+
+<Tabs>
+  <Tab title="Windows">
+    <AccordionGroup>
+      <Accordion title="C Drive Requirements">
+        **Minimum:** 100GB free space
+        
+        **Purpose:** Docker service image files
+        
+        <Note>
+        If C Drive has less than 100GB available, you can configure Docker to use a different disk location after installation.
+        </Note>
+      </Accordion>
+      
+      <Accordion title="D Drive Requirements">
+        **Minimum:** 30GB free space
+        
+        **Purpose:** Digital human models and project data
+        
+        <Warning>
+        A D Drive is **required** for Windows installations. The application stores all avatar models and generated content here.
+        </Warning>
+      </Accordion>
+    </AccordionGroup>
+  </Tab>
+  
+  <Tab title="Linux">
+    **Total Free Space:** 100GB or more
+    
+    **Purpose:** 
+    - Docker images and containers
+    - Avatar models and training data
+    - Generated video content
+    
+    All data is stored in the home directory under `~/duix_avatar_data/`
+  </Tab>
+</Tabs>
+
+## GPU Requirements
+
+### Supported Graphics Cards
+
+Duix Avatar requires an NVIDIA GPU with CUDA support:
+
+<CardGroup cols={3}>
+  <Card title="RTX 30 Series" icon="microchip">
+    - RTX 3060 or higher
+    - Tested and verified
+  </Card>
+  <Card title="RTX 40 Series" icon="microchip">
+    - RTX 4070 (recommended)
+    - RTX 4080
+    - RTX 4090
+  </Card>
+  <Card title="RTX 50 Series" icon="microchip">
+    - RTX 5090 (verified)
+    - Special configuration required
+  </Card>
+</CardGroup>
+
+### GPU Driver Requirements
+
+<Warning>
+You must have NVIDIA graphics drivers properly installed before setting up Duix Avatar.
+</Warning>
+
+**Download NVIDIA Drivers:** [https://www.nvidia.cn/drivers/lookup/](https://www.nvidia.cn/drivers/lookup/)
+
+<Steps>
+  <Step title="Download Correct Driver">
+    Visit the NVIDIA driver download page and select:
+    - Your GPU model
+    - Operating system
+    - Driver type (Game Ready or Studio)
+  </Step>
+  
+  <Step title="Install Driver">
+    Run the installer and follow the installation wizard.
+  </Step>
+  
+  <Step title="Verify Installation">
+    <Tabs>
+      <Tab title="Windows">
+        Open Command Prompt or PowerShell:
+        ```bash
+        nvidia-smi
+        ```
+      </Tab>
+      <Tab title="Linux">
+        Open terminal:
+        ```bash
+        nvidia-smi
+        ```
+      </Tab>
+    </Tabs>
+    
+    If the command displays your GPU information, the driver is correctly installed.
+  </Step>
+</Steps>
+
+## Software Dependencies
+
+### Required Software
+
+<AccordionGroup>
+  <Accordion title="Node.js 18">
+    **Purpose:** Required for running the Duix Avatar client application
+    
+    **Download:** [https://nodejs.org/](https://nodejs.org/)
+    
+    **Verification:**
+    ```bash
+    node --version
+    ```
+    Should output `v18.x.x`
+  </Accordion>
+  
+  <Accordion title="Docker">
+    **Purpose:** Container runtime for all Duix Avatar services
+    
+    **Windows:** Docker Desktop for Windows
+    
+    **Linux:** Docker Engine + Docker Compose
+    
+    **Verification:**
+    ```bash
+    docker --version
+    docker-compose --version
+    ```
+  </Accordion>
+  
+  <Accordion title="NVIDIA Container Toolkit (Linux Only)">
+    **Purpose:** Enables Docker containers to access NVIDIA GPU
+    
+    **Required for:** Ubuntu installations
+    
+    **Installation:** See [NVIDIA Setup Guide](/deployment/nvidia-setup)
+  </Accordion>
+</AccordionGroup>
+
+## Special Configurations
+
+### NVIDIA RTX 50 Series
+
+<Note>
+RTX 50 series graphics cards require special Docker images and are compatible with CUDA 12.8. The configuration also works for RTX 30/40 series with CUDA 12.8.
+</Note>
+
+For RTX 5090 and other 50 series cards:
+
+1. Use the dedicated docker-compose configuration:
+   ```bash
+   docker-compose -f docker-compose-5090.yml up -d
+   ```
+
+2. Special images are used:
+   - `guiji2025/fish-speech-5090` (TTS)
+   - `guiji2025/duix.avatar-5090` (Video Generation)
+
+### WSL 2 Requirements (Windows)
+
+Windows installations require WSL 2 (Windows Subsystem for Linux):
+
+- **Minimum Windows Version:** Windows 10 build 19042.1526
+- **WSL Version:** WSL 2 (automatically installed with Docker Desktop)
+
+## Network Requirements
+
+<Warning>
+**Initial Setup:** Requires stable internet connection for downloading Docker images (~70GB)
+
+**Runtime:** Fully offline operation - no internet connection required after setup
+</Warning>
+
+### Download Requirements
+
+- **Total Download Size:** Approximately 70GB
+- **Estimated Time:** 30 minutes (varies by network speed)
+- **Recommendation:** Use WiFi or high-speed wired connection
+
+### Bandwidth Considerations
+
+If you have limited bandwidth:
+
+1. Consider using the **lite version** which only downloads one service:
+   ```bash
+   docker-compose -f docker-compose-lite.yml up -d
+   ```
+
+2. Schedule downloads during off-peak hours
+
+3. Use a wired connection for stability
+
+## Performance Expectations
+
+Based on the recommended configuration:
+
+| Task | Expected Performance |
+|------|---------------------|
+| Voice Cloning Training | ~5-10 minutes per model |
+| Audio Synthesis | Real-time to 2x speed |
+| Video Generation | Depends on video length and resolution |
+| Lip Sync Processing | ~1-5 minutes per minute of video |
+
+<Note>
+Actual performance varies based on your hardware configuration, video resolution, and complexity of the avatar model.
+</Note>
+
+## System Check
+
+Before proceeding with installation, verify your system meets all requirements:
+
+<Steps>
+  <Step title="Check Operating System">
+    <Tabs>
+      <Tab title="Windows">
+        ```bash
+        winver
+        ```
+        Verify build number is 19042.1526 or higher
+      </Tab>
+      <Tab title="Linux">
+        ```bash
+        lsb_release -a
+        uname -r
+        ```
+        Verify Ubuntu 22.04
+      </Tab>
+    </Tabs>
+  </Step>
+  
+  <Step title="Check GPU and Drivers">
+    ```bash
+    nvidia-smi
+    ```
+    Verify GPU model and driver version are displayed
+  </Step>
+  
+  <Step title="Check Storage Space">
+    <Tabs>
+      <Tab title="Windows">
+        Check in File Explorer:
+        - C Drive: 100GB+ free
+        - D Drive: 30GB+ free
+      </Tab>
+      <Tab title="Linux">
+        ```bash
+        df -h ~
+        ```
+        Verify 100GB+ free space
+      </Tab>
+    </Tabs>
+  </Step>
+  
+  <Step title="Check RAM">
+    <Tabs>
+      <Tab title="Windows">
+        Open Task Manager → Performance tab → Memory
+      </Tab>
+      <Tab title="Linux">
+        ```bash
+        free -h
+        ```
+      </Tab>
+    </Tabs>
+    Verify 32GB+ installed
+  </Step>
+</Steps>
+
+## Next Steps
+
+Once you've verified your system meets all requirements:
+
+<CardGroup cols={2}>
+  <Card title="NVIDIA Setup" icon="microchip" href="/deployment/nvidia-setup">
+    Configure NVIDIA drivers and container toolkit
+  </Card>
+  <Card title="Docker Setup" icon="docker" href="/deployment/docker-setup">
+    Install and configure Docker for Duix Avatar
+  </Card>
+</CardGroup>

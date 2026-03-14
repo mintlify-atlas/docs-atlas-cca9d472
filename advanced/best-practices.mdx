@@ -1,0 +1,640 @@
+---
+title: Best Practices
+description: Production-ready patterns and recommendations for deploying Duix Avatar
+---
+
+## Overview
+
+This guide covers best practices for deploying and using Duix Avatar in production environments, based on patterns from the official implementation.
+
+## System Architecture
+
+### Service Isolation
+
+Duix Avatar uses a microservices architecture with three isolated Docker containers:
+
+```yaml
+services:
+  duix-avatar-tts:       # Text-to-speech service
+  duix-avatar-asr:       # Automatic speech recognition
+  duix-avatar-gen-video: # Video synthesis
+```
+
+<Tip>
+  Keep each service isolated in its own container. This allows for independent scaling and easier troubleshooting.
+</Tip>
+
+### Network Configuration
+
+Use a dedicated Docker network for service communication:
+
+```yaml
+networks:
+  ai_network:
+    driver: bridge
+
+services:
+  duix-avatar-tts:
+    networks:
+      - ai_network
+  duix-avatar-asr:
+    networks:
+      - ai_network
+  duix-avatar-gen-video:
+    networks:
+      - ai_network
+```
+
+## Resource Management
+
+### GPU Allocation
+
+Properly configure GPU access for optimal performance:
+
+```yaml
+services:
+  duix-avatar-tts:
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0
+      - NVIDIA_DRIVER_CAPABILITIES=compute,graphics,utility,video,display
+
+  duix-avatar-gen-video:
+    runtime: nvidia
+    environment:
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    shm_size: '8g'
+```
+
+<Warning>
+  The `PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512` setting prevents CUDA out-of-memory errors. Always set `shm_size` to at least 8GB for the video generation service.
+</Warning>
+
+### Memory Management
+
+Monitor and limit container memory usage:
+
+```yaml
+services:
+  duix-avatar-gen-video:
+    shm_size: '8g'  # Shared memory for CUDA operations
+    deploy:
+      resources:
+        limits:
+          memory: 24G
+        reservations:
+          memory: 16G
+```
+
+## Data Management
+
+### Directory Structure
+
+Maintain a consistent directory structure:
+
+```
+duix_avatar_data/
+├── face2face/
+│   └── temp/              # Video outputs and temp files
+└── voice/
+    └── data/
+        ├── origin_audio/  # Training audio files
+        └── ...            # Generated voice models
+```
+
+### File Organization
+
+Implement a systematic file naming convention:
+
+```javascript
+import dayjs from 'dayjs';
+import path from 'path';
+
+function generateFileName(extension) {
+  // Use timestamp-based naming for uniqueness
+  return dayjs().format('YYYYMMDDHHmmssSSS') + extension;
+}
+
+// Example: 20260314123045123.mp4
+const filename = generateFileName('.mp4');
+```
+
+<Tip>
+  Use timestamp-based filenames to avoid collisions and enable chronological sorting.
+</Tip>
+
+### Storage Volume Mapping
+
+Correctly map volumes between host and containers:
+
+```yaml
+services:
+  duix-avatar-tts:
+    volumes:
+      - d:/duix_avatar_data/voice/data:/code/data  # Windows
+      # or
+      - ~/duix_avatar_data/voice/data:/code/data   # Linux
+
+  duix-avatar-gen-video:
+    volumes:
+      - d:/duix_avatar_data/face2face:/code/data   # Windows
+      # or
+      - ~/duix_avatar_data/face2face:/code/data    # Linux
+```
+
+## Video Processing
+
+### Input Video Requirements
+
+Always validate and convert videos to the correct format:
+
+```javascript
+import ffmpeg from 'fluent-ffmpeg';
+
+async function prepareReferenceVideo(inputPath, outputPath) {
+  return new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .videoCodec('libx264')           // H.264 encoding
+      .outputOptions('-pix_fmt yuv420p') // Compatible pixel format
+      .save(outputPath)
+      .on('end', () => resolve(outputPath))
+      .on('error', reject);
+  });
+}
+```
+
+<Note>
+  Always convert reference videos to H.264 codec with yuv420p pixel format. This ensures compatibility with the video synthesis engine.
+</Note>
+
+### Audio Extraction
+
+Extract audio properly from source videos:
+
+```javascript
+async function extractAudioForTraining(videoPath, audioPath) {
+  return new Promise((resolve, reject) => {
+    ffmpeg(videoPath)
+      .noVideo()
+      .audioCodec('pcm_s16le')  // Uncompressed audio for best quality
+      .audioFrequency(16000)     // 16kHz sample rate
+      .audioChannels(1)          // Mono audio
+      .save(audioPath)
+      .on('end', () => resolve(audioPath))
+      .on('error', reject);
+  });
+}
+```
+
+## Task Management
+
+### Queue Implementation
+
+Implement a proper task queue for video generation:
+
+```javascript
+class VideoQueue {
+  constructor() {
+    this.queue = [];
+    this.processing = false;
+  }
+
+  async add(videoId) {
+    // Update status to 'waiting'
+    await updateVideoStatus(videoId, 'waiting');
+    this.queue.push(videoId);
+    
+    if (!this.processing) {
+      this.processNext();
+    }
+  }
+
+  async processNext() {
+    if (this.queue.length === 0) {
+      this.processing = false;
+      return;
+    }
+
+    this.processing = true;
+    const videoId = this.queue.shift();
+    
+    try {
+      await synthesisVideo(videoId);
+    } catch (error) {
+      console.error('Video synthesis failed:', error);
+    }
+    
+    // Process next item
+    this.processNext();
+  }
+}
+```
+
+### Status Polling
+
+Implement efficient status polling:
+
+```javascript
+async function pollVideoStatus(taskCode, maxAttempts = 300) {
+  let attempts = 0;
+  
+  while (attempts < maxAttempts) {
+    const status = await getVideoStatus(taskCode);
+    
+    // Status codes:
+    // 10000 + status 1 = Processing
+    // 10000 + status 2 = Success
+    // 10000 + status 3 = Failed
+    // 9999, 10002, 10003 = Error
+    
+    if (status.code === 10000 && status.data.status === 2) {
+      return { success: true, result: status.data.result };
+    }
+    
+    if (status.code === 10000 && status.data.status === 3) {
+      throw new Error(status.data.msg);
+    }
+    
+    if ([9999, 10002, 10003].includes(status.code)) {
+      throw new Error(status.msg);
+    }
+    
+    // Wait 2 seconds before next poll
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    attempts++;
+  }
+  
+  throw new Error('Video generation timeout');
+}
+```
+
+<Warning>
+  Don't poll too frequently. A 2-second interval is optimal to balance responsiveness and server load.
+</Warning>
+
+## Database Management
+
+### Model Storage
+
+Store model metadata efficiently:
+
+```javascript
+const modelRecord = {
+  modelName: 'John Doe Avatar',
+  videoPath: 'relative/path/to/video.mp4',  // Store relative paths
+  audioPath: 'relative/path/to/audio.wav',
+  voiceId: 'uuid-of-trained-voice',
+  createdAt: new Date().toISOString()
+};
+
+// When retrieving, resolve to absolute paths
+function getModel(modelId) {
+  const model = selectByID(modelId);
+  return {
+    ...model,
+    videoPath: path.join(assetPath.model, model.videoPath),
+    audioPath: path.join(assetPath.ttsRoot, model.audioPath)
+  };
+}
+```
+
+### Video Task Tracking
+
+Track video generation tasks with comprehensive metadata:
+
+```javascript
+const videoTask = {
+  id: generateId(),
+  modelId: 'model-uuid',
+  name: 'Video Title',
+  textContent: 'Script text...',
+  voiceId: 'voice-uuid',
+  audioPath: 'generated-audio.wav',
+  status: 'waiting', // draft, waiting, pending, success, failed
+  progress: 0,
+  message: '',
+  code: 'task-uuid',
+  filePath: null,
+  duration: null,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString()
+};
+```
+
+## Error Handling
+
+### Graceful Degradation
+
+Implement proper error handling at each stage:
+
+```javascript
+async function synthesisVideo(videoId) {
+  try {
+    // Update status to pending
+    await updateStatus(videoId, 'pending', 'Starting synthesis...');
+
+    // Get video and model data
+    const video = await getVideo(videoId);
+    const model = await getModel(video.modelId);
+
+    // Generate or use existing audio
+    let audioPath;
+    if (video.audioPath) {
+      audioPath = video.audioPath;
+    } else {
+      const voice = await getVoice(video.voiceId);
+      audioPath = await generateAudio(voice, video.textContent);
+    }
+
+    // Submit video generation
+    const { result, param } = await submitVideoGeneration(
+      audioPath,
+      model.videoPath
+    );
+
+    if (result.code === 10000) {
+      await updateStatus(videoId, 'pending', result.msg, param.code);
+    } else {
+      await updateStatus(videoId, 'failed', result.msg);
+    }
+  } catch (error) {
+    console.error('Synthesis error:', error);
+    await updateStatus(videoId, 'failed', error.message);
+    throw error;
+  }
+}
+```
+
+### Logging Best Practices
+
+Implement comprehensive logging:
+
+```javascript
+import log from './logger.js';
+
+function logAPICall(endpoint, params, response) {
+  log.debug('API Call', {
+    endpoint,
+    params: JSON.stringify(params),
+    response: JSON.stringify(response),
+    timestamp: new Date().toISOString()
+  });
+}
+
+function logError(context, error) {
+  log.error(context, {
+    message: error.message,
+    stack: error.stack,
+    timestamp: new Date().toISOString()
+  });
+}
+```
+
+## Resource Cleanup
+
+### File Cleanup
+
+Implement proper cleanup when deleting models or videos:
+
+```javascript
+import fs from 'fs';
+import path from 'path';
+
+function safeDeleteFile(filePath) {
+  if (filePath && fs.existsSync(filePath)) {
+    try {
+      fs.unlinkSync(filePath);
+      log.info('Deleted file:', filePath);
+    } catch (error) {
+      log.error('Failed to delete file:', filePath, error);
+    }
+  }
+}
+
+async function deleteModel(modelId) {
+  const model = await getModel(modelId);
+  
+  // Delete video file
+  safeDeleteFile(model.videoPath);
+  
+  // Delete audio file
+  safeDeleteFile(model.audioPath);
+  
+  // Remove database record
+  await removeFromDatabase(modelId);
+}
+```
+
+### Temporary File Management
+
+Clean up temporary files regularly:
+
+```javascript
+import os from 'os';
+import { promises as fs } from 'fs';
+
+async function cleanupTempFiles() {
+  const tempDir = os.tmpdir();
+  const files = await fs.readdir(tempDir);
+  
+  for (const file of files) {
+    if (file.startsWith('duix_temp_')) {
+      const filePath = path.join(tempDir, file);
+      const stats = await fs.stat(filePath);
+      
+      // Delete files older than 24 hours
+      const age = Date.now() - stats.mtimeMs;
+      if (age > 24 * 60 * 60 * 1000) {
+        await fs.unlink(filePath);
+      }
+    }
+  }
+}
+
+// Run cleanup daily
+setInterval(cleanupTempFiles, 24 * 60 * 60 * 1000);
+```
+
+## Security Considerations
+
+### Input Validation
+
+Always validate user inputs:
+
+```javascript
+import path from 'path';
+
+function validateFilePath(filePath, allowedDir) {
+  const resolved = path.resolve(filePath);
+  const allowed = path.resolve(allowedDir);
+  
+  if (!resolved.startsWith(allowed)) {
+    throw new Error('Invalid file path: outside allowed directory');
+  }
+  
+  return resolved;
+}
+
+function validateTextContent(text) {
+  if (!text || typeof text !== 'string') {
+    throw new Error('Invalid text content');
+  }
+  
+  if (text.length > 10000) {
+    throw new Error('Text content too long (max 10000 characters)');
+  }
+  
+  return text.trim();
+}
+```
+
+### API Rate Limiting
+
+Implement rate limiting for API endpoints:
+
+```javascript
+class RateLimiter {
+  constructor(maxRequests, windowMs) {
+    this.maxRequests = maxRequests;
+    this.windowMs = windowMs;
+    this.requests = new Map();
+  }
+
+  check(identifier) {
+    const now = Date.now();
+    const userRequests = this.requests.get(identifier) || [];
+    
+    // Remove old requests
+    const validRequests = userRequests.filter(
+      time => now - time < this.windowMs
+    );
+    
+    if (validRequests.length >= this.maxRequests) {
+      throw new Error('Rate limit exceeded');
+    }
+    
+    validRequests.push(now);
+    this.requests.set(identifier, validRequests);
+  }
+}
+
+// Allow 10 video generations per hour per user
+const limiter = new RateLimiter(10, 60 * 60 * 1000);
+```
+
+## Performance Monitoring
+
+### Service Health Checks
+
+Implement health checks for all services:
+
+```javascript
+async function checkServiceHealth() {
+  const services = [
+    { name: 'TTS', url: 'http://127.0.0.1:18180/health' },
+    { name: 'ASR', url: 'http://127.0.0.1:10095/health' },
+    { name: 'Video', url: 'http://127.0.0.1:8383/health' }
+  ];
+
+  const results = await Promise.allSettled(
+    services.map(service =>
+      axios.get(service.url, { timeout: 5000 })
+        .then(() => ({ name: service.name, status: 'healthy' }))
+        .catch(() => ({ name: service.name, status: 'unhealthy' }))
+    )
+  );
+
+  return results.map(r => r.value);
+}
+```
+
+### Metrics Collection
+
+Track important metrics:
+
+```javascript
+class MetricsCollector {
+  constructor() {
+    this.metrics = {
+      videosGenerated: 0,
+      averageGenerationTime: 0,
+      failureRate: 0,
+      queueLength: 0
+    };
+  }
+
+  recordVideoGeneration(durationMs, success) {
+    this.metrics.videosGenerated++;
+    
+    if (success) {
+      const total = this.metrics.averageGenerationTime * 
+                   (this.metrics.videosGenerated - 1);
+      this.metrics.averageGenerationTime = 
+        (total + durationMs) / this.metrics.videosGenerated;
+    } else {
+      this.metrics.failureRate = 
+        (this.metrics.failureRate * (this.metrics.videosGenerated - 1) + 1) / 
+        this.metrics.videosGenerated;
+    }
+  }
+
+  getMetrics() {
+    return { ...this.metrics };
+  }
+}
+```
+
+## Deployment Checklist
+
+<Steps>
+  <Step title="Verify Hardware Requirements">
+    Ensure NVIDIA GPU with proper drivers is installed and accessible
+  </Step>
+  
+  <Step title="Configure Docker">
+    Install Docker, docker-compose, and NVIDIA Container Toolkit
+  </Step>
+  
+  <Step title="Set Up Storage">
+    Create data directories with sufficient space (100GB+ recommended)
+  </Step>
+  
+  <Step title="Pull Docker Images">
+    Download all three required Docker images
+  </Step>
+  
+  <Step title="Configure Services">
+    Customize docker-compose.yml for your environment
+  </Step>
+  
+  <Step title="Test Services">
+    Run health checks on all services before production use
+  </Step>
+  
+  <Step title="Set Up Monitoring">
+    Implement logging and metrics collection
+  </Step>
+  
+  <Step title="Configure Backups">
+    Set up regular backups of model data and generated videos
+  </Step>
+</Steps>
+
+## Next Steps
+
+<Card title="Performance Optimization" icon="gauge" href="/advanced/performance-optimization">
+  Learn how to optimize video generation performance
+</Card>
+
+<Card title="Integration Guide" icon="plug" href="/advanced/integration">
+  Integrate Duix Avatar into your applications
+</Card>
+
+<Card title="API Reference" icon="code" href="/api/introduction">
+  Explore the complete API documentation
+</Card>

@@ -1,0 +1,460 @@
+---
+title: 'Multi-Language Support'
+description: 'Generate speech and videos in eight languages with AI-powered voice synthesis and localization'
+---
+
+## Overview
+
+Duix Avatar supports comprehensive multi-language capabilities for both voice training and speech synthesis. The system can process and generate content in eight major languages, making it suitable for global content creation and localization.
+
+<Info>
+Language support spans voice cloning, speech synthesis, and automatic speech recognition (ASR) for seamless multi-lingual video production.
+</Info>
+
+## Supported Languages
+
+Duix Avatar provides full support for the following languages:
+
+<CardGroup cols={2}>
+  <Card title="Chinese" icon="flag">
+    **Code**: `zh`
+    
+    Full support for Mandarin Chinese with tonal accuracy
+  </Card>
+  
+  <Card title="English" icon="flag-usa">
+    **Code**: `en`
+    
+    American and British English variants
+  </Card>
+  
+  <Card title="Japanese" icon="flag">
+    **Code**: `ja`
+    
+    Native Japanese pronunciation and intonation
+  </Card>
+  
+  <Card title="Korean" icon="flag">
+    **Code**: `ko`
+    
+    Korean language with proper phonetic rendering
+  </Card>
+  
+  <Card title="French" icon="flag">
+    **Code**: `fr`
+    
+    French with accurate accent and pronunciation
+  </Card>
+  
+  <Card title="German" icon="flag">
+    **Code**: `de`
+    
+    German language with proper phonetics
+  </Card>
+  
+  <Card title="Arabic" icon="flag">
+    **Code**: `ar`
+    
+    Modern Standard Arabic support
+  </Card>
+  
+  <Card title="Spanish" icon="flag">
+    **Code**: `es`
+    
+    Spanish with regional dialect support
+  </Card>
+</CardGroup>
+
+## Language Configuration
+
+### Voice Model Training
+
+Specify the language when training a voice model from audio:
+
+```javascript
+/**
+ * Train voice model with language specification
+ * @param {string} path - Path to audio file
+ * @param {string} lang - Language code (zh, en, ja, ko, fr, de, ar, es)
+ * @returns {Promise<number|boolean>} Voice model ID or false on failure
+ */
+export async function train(path, lang = 'zh') {
+  path = path.replace(/\\/g, '/') // Normalize path
+  
+  const res = await preprocessAndTran({
+    format: path.split('.').pop(),
+    reference_audio: path,
+    lang  // Language specification
+  })
+  
+  if (res.code !== 0) {
+    return false
+  }
+  
+  const { asr_format_audio_url, reference_audio_text } = res
+  return insert({ 
+    origin_audio_path: path, 
+    lang,  // Store language with model
+    asr_format_audio_url, 
+    reference_audio_text 
+  })
+}
+```
+
+<Note>
+The language parameter affects ASR (Automatic Speech Recognition) accuracy and voice synthesis quality. Always specify the correct language for best results.
+</Note>
+
+### API Request Format
+
+**Endpoint**: `http://127.0.0.1:18180/v1/preprocess_and_tran`
+
+**Method**: POST
+
+```json
+{
+  "format": "wav",
+  "reference_audio": "origin_audio/sample.wav",
+  "lang": "zh"
+}
+```
+
+**Example for Different Languages**:
+
+```javascript
+// English voice model
+await train('audio/english_sample.wav', 'en')
+
+// Japanese voice model
+await train('audio/japanese_sample.wav', 'ja')
+
+// Spanish voice model
+await train('audio/spanish_sample.wav', 'es')
+
+// French voice model
+await train('audio/french_sample.wav', 'fr')
+```
+
+## Language-Specific Features
+
+### Automatic Speech Recognition (ASR)
+
+The ASR system automatically transcribes audio in the specified language:
+
+<Steps>
+  <Step title="Audio Analysis">
+    The system analyzes audio characteristics specific to the chosen language
+  </Step>
+  
+  <Step title="Transcription">
+    Speech is converted to text using language-specific models
+    
+    ```javascript
+    const res = await preprocessAndTran({
+      format: 'wav',
+      reference_audio: audioPath,
+      lang: 'ko'  // Korean transcription
+    })
+    // Returns reference_audio_text with Korean text
+    ```
+  </Step>
+  
+  <Step title="Reference Generation">
+    Transcribed text becomes the reference for voice synthesis
+  </Step>
+</Steps>
+
+### Text-to-Speech Synthesis
+
+The TTS engine uses language-aware models for natural speech generation:
+
+```javascript
+// Synthesize speech in the model's trained language
+const voice = selectVoiceByID(voiceId)
+// voice.lang contains the language code
+
+const audioPath = await makeAudio4Video({
+  voiceId: voice.id,
+  text: "Your content in the voice's language"
+})
+```
+
+<Tip>
+For best results, ensure the text content matches the language of the voice model. Cross-language synthesis may produce unexpected results.
+</Tip>
+
+## Multi-Language Workflows
+
+### Creating Content in Multiple Languages
+
+<Steps>
+  <Step title="Train Language-Specific Models">
+    Create separate voice models for each language you need.
+    
+    ```javascript
+    // Train English voice
+    const englishVoiceId = await train('audio/en_sample.wav', 'en')
+    
+    // Train Japanese voice
+    const japaneseVoiceId = await train('audio/ja_sample.wav', 'ja')
+    
+    // Train Spanish voice
+    const spanishVoiceId = await train('audio/es_sample.wav', 'es')
+    ```
+  </Step>
+  
+  <Step title="Generate Localized Content">
+    Use appropriate voice models for each language version.
+    
+    ```javascript
+    // English video
+    await saveVideo({
+      model_id: avatarId,
+      name: 'Welcome Video - English',
+      text_content: 'Welcome to our platform',
+      voice_id: englishVoiceId
+    })
+    
+    // Japanese video
+    await saveVideo({
+      model_id: avatarId,
+      name: 'Welcome Video - Japanese',
+      text_content: 'プラットフォームへようこそ',
+      voice_id: japaneseVoiceId
+    })
+    ```
+  </Step>
+  
+  <Step title="Synthesize Videos">
+    Generate videos for each language version using the same avatar model.
+  </Step>
+</Steps>
+
+### Language-Specific Avatar Models
+
+You can create avatar models trained with language-specific source material:
+
+```javascript
+// Add English-speaking avatar
+const englishAvatarId = await addModel(
+  'English Avatar',
+  'video/english_speaker.mp4'
+)
+// This will train with lang='zh' by default in the code
+
+// Add Japanese-speaking avatar
+const japaneseAvatarId = await addModel(
+  'Japanese Avatar', 
+  'video/japanese_speaker.mp4'
+)
+```
+
+<Note>
+In the current implementation, `addModel` defaults to Chinese (`zh`) for voice training. For production use, you may want to modify the code to accept a language parameter.
+</Note>
+
+## Language Data Storage
+
+Language information is stored with voice models:
+
+```javascript
+// Voice model database schema
+{
+  id: 1,
+  origin_audio_path: 'origin_audio/sample.wav',
+  lang: 'en',  // Language code
+  asr_format_audio_url: 'processed/sample_asr.wav',
+  reference_audio_text: 'Transcribed English text'
+}
+```
+
+### Querying by Language
+
+```javascript
+// Get all voice models
+const allVoices = getAllTimbre()
+
+// Filter by language
+const englishVoices = allVoices.filter(voice => voice.lang === 'en')
+const japaneseVoices = allVoices.filter(voice => voice.lang === 'ja')
+const chineseVoices = allVoices.filter(voice => voice.lang === 'zh')
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Match Languages" icon="equals">
+    Ensure text content language matches the voice model's trained language
+  </Card>
+  
+  <Card title="Quality Audio" icon="microphone">
+    Use clear, native-speaker audio for training language-specific models
+  </Card>
+  
+  <Card title="Separate Models" icon="users">
+    Create distinct voice models for each language rather than mixing
+  </Card>
+  
+  <Card title="Test Pronunciation" icon="ear-listen">
+    Use the audition feature to verify pronunciation quality
+  </Card>
+</CardGroup>
+
+## Language-Specific Considerations
+
+### Tonal Languages (Chinese, Vietnamese)
+
+- Ensure training audio has clear tonal distinctions
+- ASR accuracy depends on proper tone recognition
+- Use native speakers for optimal voice cloning
+
+### Character-Based Languages (Japanese, Korean, Chinese)
+
+- UTF-8 encoding is essential for text input
+- Verify character rendering in transcriptions
+- Test synthesis with various character combinations
+
+### RTL Languages (Arabic)
+
+- Text direction is handled automatically by the TTS engine
+- Ensure source text is properly formatted
+- Verify Arabic-specific phonetic features
+
+### Accented Languages (English, Spanish, French)
+
+- Different regional accents can be captured in training
+- Select training audio that matches target accent
+- Consider creating separate models for different accents
+
+## Technical Implementation
+
+### ASR Integration
+
+The Fun-ASR service handles language-specific speech recognition:
+
+```javascript
+import { preprocessAndTran } from '../api/tts.js'
+
+export async function train(path, lang = 'zh') {
+  const res = await preprocessAndTran({
+    format: path.split('.').pop(),
+    reference_audio: path,
+    lang  // Passed to ASR service
+  })
+  
+  // ASR returns:
+  // - asr_format_audio_url: Processed audio
+  // - reference_audio_text: Transcribed text in specified language
+  return res
+}
+```
+
+### TTS Language Handling
+
+The Fish Speech TTS engine uses stored language data:
+
+```javascript
+const voice = selectVoiceByID(voiceId)
+
+// Voice contains:
+// - lang: 'ja' (for example)
+// - reference_text: Japanese reference text
+// - asr_format_audio_url: Processed audio
+
+const audio = await makeAudioApi({
+  speaker: uuid,
+  text: '日本語のテキスト',  // Must match voice.lang
+  reference_audio: voice.asr_format_audio_url,
+  reference_text: voice.reference_audio_text,
+  // Other parameters...
+})
+```
+
+## Localization Workflow Example
+
+Complete example for creating multi-language content:
+
+```javascript
+// 1. Train voices for each language
+const voices = {
+  en: await train('audio/english.wav', 'en'),
+  ja: await train('audio/japanese.wav', 'ja'),
+  es: await train('audio/spanish.wav', 'es')
+}
+
+// 2. Prepare localized content
+const content = {
+  en: 'Welcome to our service',
+  ja: 'サービスへようこそ',
+  es: 'Bienvenido a nuestro servicio'
+}
+
+// 3. Create videos for each language
+for (const [lang, voiceId] of Object.entries(voices)) {
+  const videoId = await saveVideo({
+    model_id: avatarId,
+    name: `Welcome - ${lang.toUpperCase()}`,
+    text_content: content[lang],
+    voice_id: voiceId
+  })
+  
+  await makeVideo(videoId)
+  console.log(`${lang.toUpperCase()} video queued:`, videoId)
+}
+```
+
+## Troubleshooting
+
+### Poor ASR Accuracy
+
+- Verify correct language code is specified
+- Check audio quality and background noise
+- Ensure audio contains clear speech in target language
+
+### Unnatural Synthesis
+
+- Confirm text language matches voice model language
+- Check for special characters or formatting issues
+- Test with simpler text first
+
+### Mixed Language Content
+
+- Create separate videos for each language
+- Avoid mixing languages in single text input
+- Use language-specific models for each segment
+
+## Docker Configuration
+
+Language support requires proper Docker service configuration:
+
+```yaml
+# docker-compose.yml
+services:
+  fun-asr:
+    image: guiji2025/fun-asr
+    # ASR service for multi-language transcription
+    
+  fish-speech:
+    image: guiji2025/fish-speech-ziming
+    # TTS service with multi-language support
+```
+
+<Note>
+Ensure both services are running for complete multi-language functionality.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Avatar Cloning" href="/features/avatar-cloning">
+    Train language-specific avatar models
+  </Card>
+  
+  <Card title="Voice Synthesis" href="/features/voice-synthesis">
+    Generate speech in multiple languages
+  </Card>
+  
+  <Card title="Video Generation" href="/features/video-generation">
+    Create localized video content
+  </Card>
+</CardGroup>

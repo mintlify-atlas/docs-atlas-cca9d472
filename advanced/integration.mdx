@@ -1,0 +1,489 @@
+---
+title: Integration Guide
+description: Learn how to integrate Duix Avatar into your applications using the REST APIs and client libraries
+---
+
+## Overview
+
+Duix Avatar provides REST APIs for model training, audio synthesis, and video generation. This guide covers integration patterns, API usage, and best practices for incorporating Duix Avatar into your applications.
+
+## Architecture
+
+Duix Avatar consists of three Docker services that work together:
+
+- **duix-avatar-tts**: Text-to-speech and voice cloning service (port 18180)
+- **duix-avatar-asr**: Automatic speech recognition service (port 10095)
+- **duix-avatar-gen-video**: Video synthesis service (port 8383)
+
+<Note>
+  All services run locally on `http://127.0.0.1` by default. Ensure all three Docker containers are running before making API calls.
+</Note>
+
+## Integration Workflow
+
+<Steps>
+  <Step title="Model Training">
+    Train a voice model using a reference audio file from your video source.
+  </Step>
+  
+  <Step title="Audio Synthesis">
+    Generate audio using the trained voice model and text input.
+  </Step>
+  
+  <Step title="Video Synthesis">
+    Combine the generated audio with a reference video to create the final avatar video.
+  </Step>
+  
+  <Step title="Progress Monitoring">
+    Poll the status endpoint to track video generation progress.
+  </Step>
+</Steps>
+
+## API Integration
+
+### 1. Voice Model Training
+
+Before generating videos, you need to train a voice model from a reference audio file.
+
+#### Prepare Audio
+
+First, extract audio from your reference video:
+
+```javascript
+import ffmpeg from 'fluent-ffmpeg';
+
+function extractAudio(videoPath, audioPath) {
+  return new Promise((resolve, reject) => {
+    ffmpeg(videoPath)
+      .noVideo()
+      .save(audioPath)
+      .on('end', () => resolve(true))
+      .on('error', (err) => reject(err));
+  });
+}
+```
+
+#### Train Voice Model
+
+Place the audio file in the `D:\duix_avatar_data\voice\data\origin_audio` directory (Windows) or `~/duix_avatar_data/voice/data/origin_audio` (Linux), then call the preprocessing endpoint:
+
+```javascript
+import axios from 'axios';
+
+async function trainVoiceModel(audioPath, language = 'zh') {
+  const response = await axios.post('http://127.0.0.1:18180/v1/preprocess_and_tran', {
+    format: audioPath.split('.').pop(),
+    reference_audio: audioPath,
+    lang: language
+  });
+
+  if (response.data.code !== 0) {
+    throw new Error('Voice training failed');
+  }
+
+  // Store these values - you'll need them for audio synthesis
+  return {
+    asrFormatAudioUrl: response.data.asr_format_audio_url,
+    referenceAudioText: response.data.reference_audio_text
+  };
+}
+```
+
+<Warning>
+  Save the `asr_format_audio_url` and `reference_audio_text` from the response. These are required for subsequent audio synthesis operations.
+</Warning>
+
+### 2. Audio Synthesis
+
+Generate speech audio from text using your trained voice model:
+
+```javascript
+import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+
+async function synthesizeAudio({
+  text,
+  referenceAudioUrl,
+  referenceText,
+  outputDir
+}) {
+  const uuid = crypto.randomUUID();
+  
+  const response = await axios.post(
+    'http://127.0.0.1:18180/v1/invoke',
+    {
+      speaker: uuid,
+      text: text,
+      format: 'wav',
+      topP: 0.7,
+      max_new_tokens: 1024,
+      chunk_length: 100,
+      repetition_penalty: 1.2,
+      temperature: 0.7,
+      need_asr: false,
+      streaming: false,
+      is_fixed_seed: 0,
+      is_norm: 1,
+      reference_audio: referenceAudioUrl,
+      reference_text: referenceText
+    },
+    { responseType: 'arraybuffer' }
+  );
+
+  const audioPath = path.join(outputDir, `${uuid}.wav`);
+  fs.writeFileSync(audioPath, response.data, 'binary');
+  
+  return audioPath;
+}
+```
+
+<Tip>
+  The `is_norm` parameter should be set to `1` for better audio quality. The `temperature` (0.7) and `topP` (0.7) parameters control speech variation.
+</Tip>
+
+### 3. Video Synthesis
+
+Combine your generated audio with a reference video:
+
+```javascript
+async function submitVideoGeneration({
+  audioPath,
+  videoPath,
+  taskCode = crypto.randomUUID()
+}) {
+  const response = await axios.post(
+    'http://127.0.0.1:8383/easy/submit',
+    {
+      audio_url: audioPath,
+      video_url: videoPath,
+      code: taskCode,
+      chaofen: 0,
+      watermark_switch: 0,
+      pn: 1
+    }
+  );
+
+  if (response.data.code !== 10000) {
+    throw new Error(`Video submission failed: ${response.data.msg}`);
+  }
+
+  return taskCode;
+}
+```
+
+### 4. Monitor Progress
+
+Poll the status endpoint to track video generation progress:
+
+```javascript
+async function checkVideoStatus(taskCode) {
+  const response = await axios.get(
+    `http://127.0.0.1:8383/easy/query?code=${taskCode}`
+  );
+
+  return response.data;
+}
+
+async function waitForCompletion(taskCode, pollInterval = 2000) {
+  return new Promise((resolve, reject) => {
+    const interval = setInterval(async () => {
+      try {
+        const status = await checkVideoStatus(taskCode);
+        
+        // Status codes:
+        // 1 = Processing
+        // 2 = Success
+        // 3 = Failed
+        
+        if (status.code === 10000 && status.data.status === 2) {
+          clearInterval(interval);
+          resolve(status.data.result); // Video file path
+        } else if (status.code === 10000 && status.data.status === 3) {
+          clearInterval(interval);
+          reject(new Error(status.data.msg));
+        } else if ([9999, 10002, 10003].includes(status.code)) {
+          clearInterval(interval);
+          reject(new Error(status.msg));
+        }
+        // Continue polling if status === 1
+      } catch (error) {
+        clearInterval(interval);
+        reject(error);
+      }
+    }, pollInterval);
+  });
+}
+```
+
+## Complete Integration Example
+
+Here's a full end-to-end example:
+
+```javascript
+import axios from 'axios';
+import crypto from 'crypto';
+import ffmpeg from 'fluent-ffmpeg';
+import fs from 'fs';
+import path from 'path';
+
+class DuixAvatarClient {
+  constructor(baseUrl = 'http://127.0.0.1') {
+    this.ttsUrl = `${baseUrl}:18180`;
+    this.videoUrl = `${baseUrl}:8383/easy`;
+  }
+
+  async extractAudio(videoPath, outputPath) {
+    return new Promise((resolve, reject) => {
+      ffmpeg(videoPath)
+        .noVideo()
+        .save(outputPath)
+        .on('end', () => resolve(outputPath))
+        .on('error', reject);
+    });
+  }
+
+  async trainVoice(audioPath, lang = 'zh') {
+    const response = await axios.post(
+      `${this.ttsUrl}/v1/preprocess_and_tran`,
+      {
+        format: audioPath.split('.').pop(),
+        reference_audio: audioPath,
+        lang
+      }
+    );
+
+    if (response.data.code !== 0) {
+      throw new Error('Voice training failed');
+    }
+
+    return {
+      asrFormatAudioUrl: response.data.asr_format_audio_url,
+      referenceAudioText: response.data.reference_audio_text
+    };
+  }
+
+  async synthesizeAudio(text, voiceModel, outputDir) {
+    const uuid = crypto.randomUUID();
+    
+    const response = await axios.post(
+      `${this.ttsUrl}/v1/invoke`,
+      {
+        speaker: uuid,
+        text,
+        format: 'wav',
+        topP: 0.7,
+        max_new_tokens: 1024,
+        chunk_length: 100,
+        repetition_penalty: 1.2,
+        temperature: 0.7,
+        need_asr: false,
+        streaming: false,
+        is_fixed_seed: 0,
+        is_norm: 1,
+        reference_audio: voiceModel.asrFormatAudioUrl,
+        reference_text: voiceModel.referenceAudioText
+      },
+      { responseType: 'arraybuffer' }
+    );
+
+    const audioPath = path.join(outputDir, `${uuid}.wav`);
+    fs.writeFileSync(audioPath, response.data, 'binary');
+    return audioPath;
+  }
+
+  async generateVideo(audioPath, videoPath) {
+    const taskCode = crypto.randomUUID();
+    
+    const response = await axios.post(
+      `${this.videoUrl}/submit`,
+      {
+        audio_url: audioPath,
+        video_url: videoPath,
+        code: taskCode,
+        chaofen: 0,
+        watermark_switch: 0,
+        pn: 1
+      }
+    );
+
+    if (response.data.code !== 10000) {
+      throw new Error(`Video submission failed: ${response.data.msg}`);
+    }
+
+    return taskCode;
+  }
+
+  async getVideoStatus(taskCode) {
+    const response = await axios.get(
+      `${this.videoUrl}/query?code=${taskCode}`
+    );
+    return response.data;
+  }
+
+  async waitForVideo(taskCode, pollInterval = 2000) {
+    return new Promise((resolve, reject) => {
+      const interval = setInterval(async () => {
+        try {
+          const status = await this.getVideoStatus(taskCode);
+          
+          if (status.code === 10000 && status.data.status === 2) {
+            clearInterval(interval);
+            resolve(status.data.result);
+          } else if (status.code === 10000 && status.data.status === 3) {
+            clearInterval(interval);
+            reject(new Error(status.data.msg));
+          } else if ([9999, 10002, 10003].includes(status.code)) {
+            clearInterval(interval);
+            reject(new Error(status.msg));
+          }
+        } catch (error) {
+          clearInterval(interval);
+          reject(error);
+        }
+      }, pollInterval);
+    });
+  }
+}
+
+// Usage
+async function createAvatarVideo() {
+  const client = new DuixAvatarClient();
+  
+  // 1. Extract audio from reference video
+  const audioPath = await client.extractAudio(
+    'reference.mp4',
+    'reference.wav'
+  );
+  
+  // 2. Train voice model
+  const voiceModel = await client.trainVoice('origin_audio/reference.wav');
+  
+  // 3. Synthesize speech
+  const generatedAudio = await client.synthesizeAudio(
+    'Hello, this is my AI avatar speaking!',
+    voiceModel,
+    './output'
+  );
+  
+  // 4. Generate video
+  const taskCode = await client.generateVideo(
+    generatedAudio,
+    'reference.mp4'
+  );
+  
+  // 5. Wait for completion
+  const videoPath = await client.waitForVideo(taskCode);
+  
+  console.log('Video generated:', videoPath);
+}
+```
+
+## Path Configuration
+
+Duix Avatar uses specific directory structures for data storage:
+
+### Windows Paths
+
+```javascript
+const paths = {
+  model: 'D:/duix_avatar_data/face2face/temp',
+  ttsProduct: 'D:/duix_avatar_data/face2face/temp',
+  ttsRoot: 'D:/duix_avatar_data/voice/data',
+  ttsTrain: 'D:/duix_avatar_data/voice/data/origin_audio'
+};
+```
+
+### Linux Paths
+
+```javascript
+import os from 'os';
+import path from 'path';
+
+const paths = {
+  model: path.join(os.homedir(), 'duix_avatar_data/face2face/temp'),
+  ttsProduct: path.join(os.homedir(), 'duix_avatar_data/face2face/temp'),
+  ttsRoot: path.join(os.homedir(), 'duix_avatar_data/voice/data'),
+  ttsTrain: path.join(os.homedir(), 'duix_avatar_data/voice/data/origin_audio')
+};
+```
+
+<Warning>
+  All file paths passed to the API should be relative to these base directories. The Docker containers mount these directories as volumes.
+</Warning>
+
+## Error Handling
+
+Implement robust error handling for all API calls:
+
+```javascript
+try {
+  const result = await client.generateVideo(audioPath, videoPath);
+} catch (error) {
+  if (error.response) {
+    // API returned an error response
+    console.error('API Error:', error.response.data);
+  } else if (error.request) {
+    // Request was made but no response received
+    console.error('No response from server. Is Docker running?');
+  } else {
+    // Other errors
+    console.error('Error:', error.message);
+  }
+}
+```
+
+## Multi-Language Support
+
+Duix Avatar supports 8 languages for text-to-speech:
+
+```javascript
+const SUPPORTED_LANGUAGES = [
+  'en', // English
+  'ja', // Japanese
+  'ko', // Korean
+  'zh', // Chinese
+  'fr', // French
+  'de', // German
+  'ar', // Arabic
+  'es'  // Spanish
+];
+
+// Train voice with specific language
+const voiceModel = await client.trainVoice('audio.wav', 'en');
+```
+
+## Video Format Requirements
+
+Ensure your reference videos are in the correct format:
+
+```javascript
+async function convertToH264(inputPath, outputPath) {
+  return new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .videoCodec('libx264')
+      .outputOptions('-pix_fmt yuv420p')
+      .save(outputPath)
+      .on('end', () => resolve(outputPath))
+      .on('error', reject);
+  });
+}
+```
+
+<Tip>
+  Always convert videos to H.264 codec with yuv420p pixel format before using them as reference videos.
+</Tip>
+
+## Next Steps
+
+<Card title="Best Practices" icon="star" href="/advanced/best-practices">
+  Learn best practices for production deployments
+</Card>
+
+<Card title="Performance Optimization" icon="gauge" href="/advanced/performance-optimization">
+  Optimize video generation performance
+</Card>
+
+<Card title="API Reference" icon="code" href="/api/introduction">
+  Explore detailed API documentation
+</Card>

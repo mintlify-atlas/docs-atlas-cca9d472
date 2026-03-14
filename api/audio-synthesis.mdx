@@ -1,0 +1,596 @@
+---
+title: 'Audio Synthesis'
+description: 'Generate audio from text using trained voice models'
+---
+
+## Overview
+
+The audio synthesis API converts text to speech using your trained voice models. It uses the Fish Speech TTS service to generate natural-sounding audio with the voice characteristics cloned during model training.
+
+## Endpoint
+
+```
+POST http://127.0.0.1:18180/v1/invoke
+```
+
+## Request Parameters
+
+<ParamField path="speaker" type="string" required>
+  Unique identifier for this synthesis request
+  
+  Generate a new UUID for each request using `crypto.randomUUID()`
+</ParamField>
+
+<ParamField path="text" type="string" required>
+  Text content to synthesize into speech
+  
+  Supports multiple languages including Chinese, English, Japanese, Korean, French, German, Arabic, and Spanish.
+</ParamField>
+
+<ParamField path="reference_audio" type="string" required>
+  Path to the preprocessed reference audio
+  
+  This is the `asr_format_audio_url` value returned from the model training API.
+  
+  Example: `origin_audio/20240315123045678_processed.wav`
+</ParamField>
+
+<ParamField path="reference_text" type="string" required>
+  Transcribed text from the reference audio
+  
+  This is the `reference_audio_text` value returned from the model training API.
+</ParamField>
+
+<ParamField path="format" type="string" default="wav">
+  Output audio format
+  
+  Currently only `"wav"` is supported. This is a fixed parameter.
+</ParamField>
+
+<ParamField path="topP" type="number" default="0.7">
+  Top-p sampling parameter for generation
+  
+  Range: 0.0 to 1.0. Higher values increase randomness. Fixed parameter.
+</ParamField>
+
+<ParamField path="max_new_tokens" type="integer" default="1024">
+  Maximum number of tokens to generate
+  
+  Controls the maximum length of generated audio. Fixed parameter.
+</ParamField>
+
+<ParamField path="chunk_length" type="integer" default="100">
+  Length of audio chunks for processing
+  
+  Fixed parameter for optimal performance.
+</ParamField>
+
+<ParamField path="repetition_penalty" type="number" default="1.2">
+  Penalty for repeating tokens
+  
+  Higher values reduce repetition. Fixed parameter.
+</ParamField>
+
+<ParamField path="temperature" type="number" default="0.7">
+  Sampling temperature for generation
+  
+  Range: 0.0 to 2.0. Higher values increase randomness. Fixed parameter.
+</ParamField>
+
+<ParamField path="need_asr" type="boolean" default="false">
+  Whether to perform ASR on the output
+  
+  Fixed parameter, should always be `false`.
+</ParamField>
+
+<ParamField path="streaming" type="boolean" default="false">
+  Whether to stream the audio response
+  
+  Fixed parameter, should always be `false`.
+</ParamField>
+
+<ParamField path="is_fixed_seed" type="integer" default="0">
+  Whether to use a fixed random seed
+  
+  Fixed parameter: `0` (disabled) or `1` (enabled).
+</ParamField>
+
+<ParamField path="is_norm" type="integer" default="1">
+  Whether to normalize the audio output
+  
+  Fixed parameter: `0` (disabled) or `1` (enabled).
+</ParamField>
+
+## Request Example
+
+<CodeGroup>
+
+```javascript Node.js
+import crypto from 'crypto'
+import fs from 'fs'
+import fetch from 'node-fetch'
+
+const synthesizeAudio = async (voiceModel, text, outputPath) => {
+  const uuid = crypto.randomUUID()
+  
+  const params = {
+    speaker: uuid,
+    text: text,
+    format: 'wav',
+    topP: 0.7,
+    max_new_tokens: 1024,
+    chunk_length: 100,
+    repetition_penalty: 1.2,
+    temperature: 0.7,
+    need_asr: false,
+    streaming: false,
+    is_fixed_seed: 0,
+    is_norm: 1,
+    reference_audio: voiceModel.asr_format_audio_url,
+    reference_text: voiceModel.reference_audio_text
+  }
+  
+  const response = await fetch('http://127.0.0.1:18180/v1/invoke', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  })
+  
+  const audioBuffer = await response.arrayBuffer()
+  fs.writeFileSync(outputPath, Buffer.from(audioBuffer), 'binary')
+  
+  return outputPath
+}
+
+// Usage
+const voiceModel = {
+  asr_format_audio_url: 'origin_audio/my_voice_processed.wav',
+  reference_audio_text: '你好世界'
+}
+
+await synthesizeAudio(
+  voiceModel,
+  '今天天气真好',
+  './output/speech.wav'
+)
+```
+
+```bash cURL
+curl -X POST http://127.0.0.1:18180/v1/invoke \
+  -H "Content-Type: application/json" \
+  -d '{
+    "speaker": "550e8400-e29b-41d4-a716-446655440000",
+    "text": "今天天气真好",
+    "format": "wav",
+    "topP": 0.7,
+    "max_new_tokens": 1024,
+    "chunk_length": 100,
+    "repetition_penalty": 1.2,
+    "temperature": 0.7,
+    "need_asr": false,
+    "streaming": false,
+    "is_fixed_seed": 0,
+    "is_norm": 1,
+    "reference_audio": "origin_audio/my_voice_processed.wav",
+    "reference_text": "你好世界"
+  }' \
+  --output speech.wav
+```
+
+```python Python
+import uuid
+import requests
+import json
+
+def synthesize_audio(voice_model, text, output_path):
+    speaker_uuid = str(uuid.uuid4())
+    
+    params = {
+        'speaker': speaker_uuid,
+        'text': text,
+        'format': 'wav',
+        'topP': 0.7,
+        'max_new_tokens': 1024,
+        'chunk_length': 100,
+        'repetition_penalty': 1.2,
+        'temperature': 0.7,
+        'need_asr': False,
+        'streaming': False,
+        'is_fixed_seed': 0,
+        'is_norm': 1,
+        'reference_audio': voice_model['asr_format_audio_url'],
+        'reference_text': voice_model['reference_audio_text']
+    }
+    
+    response = requests.post(
+        'http://127.0.0.1:18180/v1/invoke',
+        headers={'Content-Type': 'application/json'},
+        data=json.dumps(params)
+    )
+    
+    with open(output_path, 'wb') as f:
+        f.write(response.content)
+    
+    return output_path
+
+# Usage
+voice_model = {
+    'asr_format_audio_url': 'origin_audio/my_voice_processed.wav',
+    'reference_audio_text': '你好世界'
+}
+
+synthesize_audio(voice_model, '今天天气真好', './output/speech.wav')
+```
+
+</CodeGroup>
+
+## Response Format
+
+The API returns the synthesized audio as **binary data** in WAV format.
+
+<ResponseField name="Content-Type" type="string">
+  `application/octet-stream` or `audio/wav`
+</ResponseField>
+
+<ResponseField name="Body" type="binary">
+  Raw WAV audio data
+  
+  Save this directly to a file with `.wav` extension.
+</ResponseField>
+
+<Note>
+  Unlike other endpoints, the audio synthesis API returns binary audio data, not JSON. Use `responseType: 'arraybuffer'` in your HTTP client.
+</Note>
+
+## Complete Implementation
+
+### From src/main/service/voice.js
+
+```javascript
+import crypto from 'crypto'
+import fs from 'fs'
+import path from 'path'
+import { makeAudio as makeAudioApi } from '../api/tts.js'
+import { selectByID } from '../dao/voice.js'
+import { assetPath } from '../config/config.js'
+
+export async function makeAudio({ voiceId, text, targetDir }) {
+  const uuid = crypto.randomUUID()
+  const voice = selectByID(voiceId)
+
+  return makeAudioApi({
+    speaker: uuid,
+    text,
+    format: 'wav',
+    topP: 0.7,
+    max_new_tokens: 1024,
+    chunk_length: 100,
+    repetition_penalty: 1.2,
+    temperature: 0.7,
+    need_asr: false,
+    streaming: false,
+    is_fixed_seed: 0,
+    is_norm: 1,
+    reference_audio: voice.asr_format_audio_url,
+    reference_text: voice.reference_audio_text
+  })
+    .then((res) => {
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true })
+      }
+      fs.writeFileSync(
+        path.join(targetDir, `${uuid}.wav`),
+        res,
+        'binary'
+      )
+      return `${uuid}.wav`
+    })
+    .catch((error) => {
+      console.error('Error generating audio:', error)
+      throw error
+    })
+}
+```
+
+### API Client Implementation
+
+From `src/main/api/tts.js`:
+
+```javascript
+import request from './request.js'
+import { serviceUrl } from '../config/config.js'
+
+export function makeAudio(param) {
+  return request.post(`${serviceUrl.tts}/v1/invoke`, param, {
+    responseType: 'arraybuffer'
+  })
+}
+```
+
+## Use Cases
+
+### 1. Generate Audio for Video Synthesis
+
+```javascript
+import { makeAudio4Video } from './service/voice.js'
+
+const audioFileName = await makeAudio4Video({
+  voiceId: 123,
+  text: 'Hello, this is a test message.'
+})
+
+console.log(`Audio saved as: ${audioFileName}`)
+// Output: Audio saved as: 550e8400-e29b-41d4-a716-446655440000.wav
+```
+
+### 2. Voice Audition
+
+Test a voice model before using it:
+
+```javascript
+export async function audition(voiceId, text) {
+  const tmpDir = require('os').tmpdir()
+  const audioPath = await makeAudio({
+    voiceId,
+    text,
+    targetDir: tmpDir
+  })
+  return path.join(tmpDir, audioPath)
+}
+
+// Usage
+const previewPath = await audition(123, 'This is a preview')
+console.log(`Preview audio: ${previewPath}`)
+```
+
+### 3. Batch Audio Generation
+
+```javascript
+async function generateMultipleAudios(voiceId, texts) {
+  const results = []
+  
+  for (const text of texts) {
+    const audioFile = await makeAudio({
+      voiceId,
+      text,
+      targetDir: './output/batch'
+    })
+    results.push({ text, audioFile })
+  }
+  
+  return results
+}
+
+// Usage
+const texts = [
+  'First sentence',
+  'Second sentence',
+  'Third sentence'
+]
+
+const audios = await generateMultipleAudios(123, texts)
+```
+
+### 4. Custom Audio with External File
+
+Use your own audio file instead of synthesizing:
+
+```javascript
+import { copyAudio4Video } from './service/voice.js'
+
+export function copyAudio4Video(filePath) {
+  const targetDir = assetPath.ttsProduct
+  const fileName = dayjs().format('YYYYMMDDHHmmssSSS') + path.extname(filePath)
+  const targetPath = path.join(targetDir, fileName)
+  fs.copyFileSync(filePath, targetPath)
+  return fileName
+}
+
+// Usage
+const audioFileName = copyAudio4Video('/path/to/custom/audio.wav')
+```
+
+## Error Handling
+
+### Common Errors
+
+<Expandable title="Voice Model Not Found">
+  **Error:** Voice model ID does not exist
+  
+  **Solution:**
+  ```javascript
+  const voice = selectByID(voiceId)
+  if (!voice) {
+    throw new Error(`Voice model ${voiceId} not found`)
+  }
+  ```
+</Expandable>
+
+<Expandable title="Invalid Reference Audio">
+  **Error:** Reference audio file is missing or corrupted
+  
+  **Solution:**
+  ```javascript
+  const audioPath = path.join(assetPath.ttsRoot, voice.asr_format_audio_url)
+  if (!fs.existsSync(audioPath)) {
+    throw new Error(`Reference audio not found: ${audioPath}`)
+  }
+  ```
+</Expandable>
+
+<Expandable title="Text Too Long">
+  **Error:** Input text exceeds maximum token limit
+  
+  **Solution:**
+  - Split long text into chunks
+  - Increase `max_new_tokens` parameter
+  - Generate multiple audio files and concatenate
+  
+  ```javascript
+  function splitText(text, maxLength = 500) {
+    const chunks = []
+    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text]
+    
+    let currentChunk = ''
+    for (const sentence of sentences) {
+      if ((currentChunk + sentence).length > maxLength) {
+        chunks.push(currentChunk)
+        currentChunk = sentence
+      } else {
+        currentChunk += sentence
+      }
+    }
+    if (currentChunk) chunks.push(currentChunk)
+    
+    return chunks
+  }
+  ```
+</Expandable>
+
+<Expandable title="Service Unavailable">
+  **Error:** TTS service is not responding
+  
+  **Solution:**
+  ```bash
+  # Check if Docker container is running
+  docker ps | grep fish-speech-ziming
+  
+  # Restart the service if needed
+  docker-compose restart fish-speech-ziming
+  ```
+</Expandable>
+
+## Best Practices
+
+### 1. Reuse Voice Models
+
+Load voice models once and reuse:
+
+```javascript
+const voiceCache = new Map()
+
+function getVoiceModel(voiceId) {
+  if (!voiceCache.has(voiceId)) {
+    const voice = selectByID(voiceId)
+    voiceCache.set(voiceId, voice)
+  }
+  return voiceCache.get(voiceId)
+}
+```
+
+### 2. Validate Text Input
+
+Check text before synthesis:
+
+```javascript
+function validateText(text) {
+  if (!text || text.trim().length === 0) {
+    throw new Error('Text cannot be empty')
+  }
+  
+  if (text.length > 5000) {
+    throw new Error('Text is too long (max 5000 characters)')
+  }
+  
+  return text.trim()
+}
+```
+
+### 3. Handle Async Errors
+
+Always use try-catch:
+
+```javascript
+async function safeAudioSynthesis(voiceId, text) {
+  try {
+    const audioFile = await makeAudio({
+      voiceId,
+      text,
+      targetDir: './output'
+    })
+    return { success: true, file: audioFile }
+  } catch (error) {
+    console.error('Audio synthesis failed:', error)
+    return { success: false, error: error.message }
+  }
+}
+```
+
+### 4. Clean Up Temporary Files
+
+Remove temporary audio files:
+
+```javascript
+import { unlink } from 'fs/promises'
+
+async function synthesizeAndCleanup(voiceId, text) {
+  const tmpDir = require('os').tmpdir()
+  
+  try {
+    const audioFile = await makeAudio({ voiceId, text, targetDir: tmpDir })
+    const fullPath = path.join(tmpDir, audioFile)
+    
+    // Use the audio...
+    
+    // Clean up
+    await unlink(fullPath)
+  } catch (error) {
+    console.error('Error:', error)
+  }
+}
+```
+
+## Parameter Tuning
+
+### Voice Quality Parameters
+
+Adjust these parameters for different effects:
+
+```javascript
+const qualityPresets = {
+  // Natural, conservative generation
+  conservative: {
+    topP: 0.5,
+    temperature: 0.5,
+    repetition_penalty: 1.3
+  },
+  
+  // Balanced (default)
+  balanced: {
+    topP: 0.7,
+    temperature: 0.7,
+    repetition_penalty: 1.2
+  },
+  
+  // More varied and expressive
+  expressive: {
+    topP: 0.9,
+    temperature: 0.9,
+    repetition_penalty: 1.1
+  }
+}
+```
+
+### Length Control
+
+Control audio length:
+
+```javascript
+const lengthPresets = {
+  short: { max_new_tokens: 512, chunk_length: 50 },
+  medium: { max_new_tokens: 1024, chunk_length: 100 },
+  long: { max_new_tokens: 2048, chunk_length: 200 }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Video Synthesis" icon="film" href="/api/video-synthesis">
+    Create lip-synced avatar videos using generated audio
+  </Card>
+  
+  <Card title="Model Training" icon="graduation-cap" href="/api/model-training">
+    Train new voice models from video files
+  </Card>
+</CardGroup>

@@ -1,0 +1,200 @@
+---
+title: 'Avatar Cloning'
+description: 'Clone realistic digital avatars from video using AI-powered appearance and voice cloning technology'
+---
+
+## Overview
+
+Duix Avatar's cloning technology enables you to create realistic digital avatars by analyzing real-person video data. The system captures facial features, contours, and voice characteristics with high precision to build virtual models that accurately represent the original person.
+
+<Info>
+Avatar cloning uses advanced AI algorithms to digitalize your appearance and voice, creating a virtual representation that can be driven by text or voice input.
+</Info>
+
+## How Avatar Cloning Works
+
+The avatar cloning process involves training a model from source video and audio data:
+
+<Steps>
+  <Step title="Video Processing">
+    The system separates the source video into silent video and audio components using FFmpeg.
+    
+    ```javascript
+    // Extract audio from video for voice training
+    const audioPath = path.join(assetPath.ttsTrain, modelFileName.replace(extname, '.wav'))
+    return extractAudio(modelPath, audioPath)
+    ```
+  </Step>
+
+  <Step title="Voice Model Training">
+    The extracted audio is used to train a voice model that captures your unique vocal characteristics.
+    
+    ```javascript
+    // Train voice model with extracted audio
+    const relativeAudioPath = path.relative(assetPath.ttsRoot, audioPath)
+    return trainVoice(relativeAudioPath, 'zh')
+    ```
+  </Step>
+
+  <Step title="Model Storage">
+    The trained model is stored with metadata linking the video, audio, and voice ID for future use.
+    
+    ```javascript
+    // Store model information in database
+    const id = insert({ 
+      modelName, 
+      videoPath: relativeModelPath, 
+      audioPath: relativeAudioPath, 
+      voiceId 
+    })
+    ```
+  </Step>
+</Steps>
+
+## Creating an Avatar Model
+
+To add a new avatar model to the system:
+
+```javascript
+/**
+ * Add a new avatar model
+ * @param {string} modelName - Name for the avatar model
+ * @param {string} videoPath - Path to source video file
+ * @returns {Promise<number>} Model ID
+ */
+async function addModel(modelName, videoPath) {
+  // Copy and convert video to H.264 format
+  const modelPath = path.join(assetPath.model, modelFileName)
+  await toH264(videoPath, modelPath)
+  
+  // Extract audio for voice training
+  const audioPath = path.join(assetPath.ttsTrain, modelFileName.replace(extname, '.wav'))
+  await extractAudio(modelPath, audioPath)
+  
+  // Train voice model
+  const voiceId = await trainVoice(relativeAudioPath, 'zh')
+  
+  // Store model data
+  return insert({ modelName, videoPath: relativeModelPath, audioPath: relativeAudioPath, voiceId })
+}
+```
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Precise Appearance Capture" icon="face-viewfinder">
+    High-precision capture of facial features, contours, and expressions to build realistic virtual models
+  </Card>
+  
+  <Card title="Voice Cloning" icon="microphone">
+    Accurate reproduction of vocal characteristics including context, intonation, and speech patterns
+  </Card>
+  
+  <Card title="Offline Processing" icon="shield-check">
+    Complete local processing ensures privacy protection with no data transmitted over the network
+  </Card>
+  
+  <Card title="Multiple Models" icon="users">
+    Support for importing and managing multiple avatar models with one-click activation
+  </Card>
+</CardGroup>
+
+## Model Management
+
+### Retrieving Models
+
+Query avatar models with pagination support:
+
+```javascript
+// Get paginated list of models
+function page({ page, pageSize, name = '' }) {
+  const total = count(name)
+  return {
+    total,
+    list: selectPage({ page, pageSize, name }).map((model) => ({
+      ...model,
+      video_path: path.join(assetPath.model, model.video_path),
+      audio_path: path.join(assetPath.ttsRoot, model.audio_path)
+    }))
+  }
+}
+```
+
+### Finding Specific Models
+
+```javascript
+// Find model by ID
+function findModel(modelId) {
+  const model = selectByID(modelId)
+  return {
+    ...model,
+    video_path: path.join(assetPath.model, model.video_path),
+    audio_path: path.join(assetPath.ttsRoot, model.audio_path)
+  }
+}
+```
+
+### Removing Models
+
+```javascript
+// Remove model and associated files
+function removeModel(modelId) {
+  const model = selectByID(modelId)
+  
+  // Delete video file
+  const videoPath = path.join(assetPath.model, model.video_path || '')
+  if (!isEmpty(model.video_path) && fs.existsSync(videoPath)) {
+    fs.unlinkSync(videoPath)
+  }
+  
+  // Delete audio file
+  const audioPath = path.join(assetPath.ttsRoot, model.audio_path || '')
+  if (!isEmpty(model.audio_path) && fs.existsSync(audioPath)) {
+    fs.unlinkSync(audioPath)
+  }
+  
+  deleteModel(modelId)
+}
+```
+
+## Technical Requirements
+
+<Note>
+Source video should be clear with good lighting and minimal background noise for optimal cloning results.
+</Note>
+
+### Video Specifications
+
+- **Format**: MP4, AVI, or other common formats (converted to H.264)
+- **Duration**: Sufficient length to capture voice characteristics (recommended 30+ seconds)
+- **Quality**: Clear facial visibility with good lighting
+- **Audio**: Clean audio with minimal background noise
+
+### Storage Requirements
+
+- **Model Data**: Stored in `D:\duix_avatar_data\model`
+- **Voice Training Data**: Stored in `D:\duix_avatar_data\voice\data`
+- **Free Space**: Minimum 30GB on D drive
+
+## Best Practices
+
+<Tip>
+For best results, use source video with the subject facing the camera directly, speaking naturally with varied intonation.
+</Tip>
+
+1. **Video Quality**: Use high-resolution video with clear facial features
+2. **Audio Quality**: Ensure clean audio recording without echo or distortion
+3. **Multiple Takes**: Consider training multiple models for different use cases
+4. **Regular Updates**: Retrain models periodically to maintain quality
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Voice Synthesis" href="/features/voice-synthesis">
+    Learn how to generate speech using cloned voices
+  </Card>
+  
+  <Card title="Video Generation" href="/features/video-generation">
+    Create videos using your cloned avatars
+  </Card>
+</CardGroup>

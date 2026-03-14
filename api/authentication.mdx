@@ -1,0 +1,320 @@
+---
+title: 'Authentication'
+description: 'API authentication and security for Duix Avatar services'
+---
+
+## Overview
+
+Duix Avatar APIs are designed for local, offline deployment and **do not require traditional authentication mechanisms** like API keys or OAuth tokens. The services run locally on your machine and are accessible only through localhost.
+
+## Security Model
+
+### Local-Only Access
+
+All API endpoints are bound to localhost (127.0.0.1) and are not exposed to external networks:
+
+```javascript
+const serviceUrl = {
+  face2face: 'http://127.0.0.1:8383/easy',
+  tts: 'http://127.0.0.1:18180'
+}
+```
+
+<Warning>
+  The services are only accessible from the same machine where Docker is running. This provides inherent security by preventing external access.
+</Warning>
+
+### No API Keys Required
+
+Unlike cloud-based APIs, Duix Avatar does not require:
+
+- API keys
+- Access tokens
+- OAuth credentials
+- User authentication
+- Request signatures
+
+## Request Identification
+
+### UUID-Based Task Tracking
+
+While authentication is not required, the APIs use UUIDs to track individual requests and tasks:
+
+```javascript
+import crypto from 'crypto'
+
+// Generate unique ID for audio synthesis
+const uuid = crypto.randomUUID()
+
+const audioRequest = {
+  speaker: uuid,  // Unique identifier for this request
+  text: "Hello world",
+  // ... other parameters
+}
+```
+
+### Video Task Codes
+
+Video synthesis uses a unique `code` parameter to track processing status:
+
+```javascript
+const videoRequest = {
+  audio_url: "audio.wav",
+  video_url: "video.mp4",
+  code: crypto.randomUUID(),  // Unique task identifier
+  chaofen: 0,
+  watermark_switch: 0,
+  pn: 1
+}
+
+// Later, query status using the same code
+const status = await fetch(`http://127.0.0.1:8383/easy/query?code=${videoRequest.code}`)
+```
+
+## Network Configuration
+
+### Development vs Production
+
+The service URLs differ between development and production modes:
+
+**Development Mode:**
+```javascript
+if (process.env.NODE_ENV === 'development') {
+  serviceUrl = {
+    face2face: 'http://192.168.4.204:8383/easy',
+    tts: 'http://192.168.4.204:18180'
+  }
+}
+```
+
+**Production Mode:**
+```javascript
+else {
+  serviceUrl = {
+    face2face: 'http://127.0.0.1:8383/easy',
+    tts: 'http://127.0.0.1:18180'
+  }
+}
+```
+
+<Note>
+  Development mode uses a specific IP address for testing, while production always uses localhost for security.
+</Note>
+
+## Docker Service Access
+
+### Required Services
+
+Ensure all three Docker services are running before making API calls:
+
+```bash
+# Check running containers
+docker ps
+
+# You should see:
+# - guiji2025/fun-asr
+# - guiji2025/fish-speech-ziming  
+# - guiji2025/duix.avatar
+```
+
+### Port Mapping
+
+The Docker containers expose the following ports:
+
+| Service | Container Port | Host Port | Purpose |
+|---------|----------------|-----------|----------|
+| fish-speech-ziming | 18180 | 18180 | TTS service |
+| duix.avatar | 8383 | 8383 | Face2Face video synthesis |
+| fun-asr | 10095 | 10095 | ASR preprocessing |
+
+## Data Access Security
+
+### File System Permissions
+
+The APIs require read/write access to specific directories:
+
+**Windows:**
+```
+D:\duix_avatar_data\face2face\temp  (model videos)
+D:\duix_avatar_data\voice\data      (voice data)
+```
+
+**Linux/Mac:**
+```bash
+~/duix_avatar_data/face2face/temp  # model videos
+~/duix_avatar_data/voice/data      # voice data
+```
+
+<Warning>
+  Ensure the Docker containers have appropriate volume mounts and file permissions to access these directories.
+</Warning>
+
+### Volume Mounts
+
+In your `docker-compose.yml`, volumes should be configured:
+
+```yaml
+volumes:
+  - D:/duix_avatar_data/voice/data:/app/voice/data
+  - D:/duix_avatar_data/face2face/temp:/app/face2face/temp
+```
+
+## Request Validation
+
+### File Path Validation
+
+The APIs validate file paths to prevent unauthorized access:
+
+```javascript
+// File paths are normalized and validated
+path = path.replace(/\\/g, '/')  // Convert Windows paths
+
+// Paths are relative to configured base directories
+const relativePath = path.relative(assetPath.ttsRoot, audioPath)
+```
+
+### Parameter Validation
+
+APIs validate required parameters before processing:
+
+```javascript
+if (!modelName || !videoPath) {
+  throw new Error('Missing required parameters')
+}
+
+if (!fs.existsSync(videoPath)) {
+  throw new Error('Video file not found')
+}
+```
+
+## Best Practices
+
+### 1. Use UUIDs for Tracking
+
+Always generate unique UUIDs for each request:
+
+```javascript
+import crypto from 'crypto'
+
+const taskId = crypto.randomUUID()
+console.log(`Task ID: ${taskId}`)
+```
+
+### 2. Verify Services Are Running
+
+Before making API calls, check that services are accessible:
+
+```javascript
+try {
+  const response = await fetch('http://127.0.0.1:18180/health')
+  if (response.ok) {
+    console.log('TTS service is running')
+  }
+} catch (error) {
+  console.error('TTS service is not accessible')
+}
+```
+
+### 3. Handle File Paths Correctly
+
+Always use absolute paths and ensure files exist:
+
+```javascript
+import path from 'path'
+import fs from 'fs'
+
+const absolutePath = path.resolve(videoPath)
+if (!fs.existsSync(absolutePath)) {
+  throw new Error(`File not found: ${absolutePath}`)
+}
+```
+
+### 4. Store Reference Values
+
+Save the response from model training for later use:
+
+```javascript
+const trainingResponse = await trainVoice(audioPath, 'zh')
+
+// Store these values - you'll need them for audio synthesis
+const voiceModel = {
+  voiceId: trainingResponse.voiceId,
+  asr_format_audio_url: trainingResponse.asr_format_audio_url,
+  reference_audio_text: trainingResponse.reference_audio_text
+}
+```
+
+## Error Handling
+
+### Connection Errors
+
+Handle cases where services are not running:
+
+```javascript
+try {
+  const response = await fetch('http://127.0.0.1:18180/v1/invoke', {
+    method: 'POST',
+    body: JSON.stringify(params)
+  })
+} catch (error) {
+  if (error.code === 'ECONNREFUSED') {
+    console.error('Service not running. Start Docker containers first.')
+  }
+}
+```
+
+### File Access Errors
+
+Handle permission and path issues:
+
+```javascript
+try {
+  fs.writeFileSync(outputPath, audioData, 'binary')
+} catch (error) {
+  if (error.code === 'EACCES') {
+    console.error('Permission denied. Check file system permissions.')
+  } else if (error.code === 'ENOENT') {
+    console.error('Directory does not exist. Create it first.')
+  }
+}
+```
+
+## Privacy and Data Security
+
+### Offline Operation
+
+Duix Avatar operates completely offline:
+
+- No data is sent to external servers
+- All processing happens locally on your machine
+- No telemetry or analytics are collected
+- Your voice models and videos remain private
+
+<Info>
+  This offline-first design ensures complete privacy and data security for sensitive content.
+</Info>
+
+### Data Retention
+
+You control all data:
+
+- Voice models are stored locally
+- Generated audio and video files remain on your file system
+- Delete data by removing files from the storage directories
+- No cloud backups or external copies are created
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Model Training" icon="graduation-cap" href="/api/model-training">
+    Train voice models from video
+  </Card>
+  
+  <Card title="Audio Synthesis" icon="music" href="/api/audio-synthesis">
+    Generate audio from text
+  </Card>
+  
+  <Card title="Video Synthesis" icon="film" href="/api/video-synthesis">
+    Create avatar videos
+  </Card>
+</CardGroup>

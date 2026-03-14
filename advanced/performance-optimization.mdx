@@ -1,0 +1,824 @@
+---
+title: Performance Optimization
+description: Optimize Duix Avatar for faster video generation and better resource utilization
+---
+
+## Overview
+
+This guide covers performance optimization techniques for Duix Avatar, including GPU configuration, memory management, and processing optimizations.
+
+## GPU Optimization
+
+### CUDA Configuration
+
+Optimize CUDA memory allocation to prevent out-of-memory errors:
+
+```yaml
+services:
+  duix-avatar-gen-video:
+    environment:
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+    shm_size: '8g'
+```
+
+<Tip>
+  The `max_split_size_mb:512` setting prevents memory fragmentation. Increase to `1024` if you have a high-end GPU (RTX 4090, RTX 5090).
+</Tip>
+
+### GPU Device Selection
+
+For multi-GPU systems, specify which GPU to use:
+
+```yaml
+services:
+  duix-avatar-tts:
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0  # Use first GPU
+
+  duix-avatar-asr:
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0  # Share GPU with TTS
+
+  duix-avatar-gen-video:
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=1  # Use second GPU (most intensive)
+```
+
+### GPU Compatibility
+
+Different GPU generations require different configurations:
+
+#### RTX 30/40 Series (Standard)
+
+```yaml
+services:
+  duix-avatar-gen-video:
+    image: guiji2025/duix.avatar
+    runtime: nvidia
+```
+
+#### RTX 50 Series (Preview PyTorch)
+
+For 50-series GPUs, use the specialized configuration:
+
+```yaml
+services:
+  duix-avatar-gen-video:
+    image: guiji2025/duix.avatar:cuda12.8
+    runtime: nvidia
+    environment:
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:1024
+    shm_size: '16g'
+```
+
+<Note>
+  RTX 50 series GPUs require CUDA 12.8 and the preview version of PyTorch. They also benefit from increased shared memory.
+</Note>
+
+## Memory Optimization
+
+### Container Memory Limits
+
+Set appropriate memory limits for each service:
+
+```yaml
+services:
+  duix-avatar-tts:
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 4G
+
+  duix-avatar-asr:
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+        reservations:
+          memory: 3G
+
+  duix-avatar-gen-video:
+    deploy:
+      resources:
+        limits:
+          memory: 24G
+        reservations:
+          memory: 16G
+    shm_size: '8g'
+```
+
+### Shared Memory Configuration
+
+The video generation service requires substantial shared memory:
+
+```yaml
+services:
+  duix-avatar-gen-video:
+    shm_size: '8g'  # Minimum for RTX 4070
+    # shm_size: '16g'  # Recommended for RTX 4090/5090
+```
+
+<Warning>
+  Insufficient shared memory (`shm_size`) will cause the video generation service to crash with "Bus error" messages.
+</Warning>
+
+## FFmpeg Optimization
+
+### Hardware-Accelerated Encoding
+
+Leverage NVIDIA hardware encoding when available:
+
+```javascript
+import ffmpeg from 'fluent-ffmpeg';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
+
+async function detectNvidiaEncoder() {
+  try {
+    await execAsync('nvidia-smi');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function convertVideo(inputPath, outputPath) {
+  const hasNvidia = await detectNvidiaEncoder();
+  
+  return new Promise((resolve, reject) => {
+    const command = ffmpeg(inputPath);
+    
+    if (hasNvidia) {
+      // Use NVIDIA hardware encoding
+      command
+        .videoCodec('h264_nvenc')
+        .outputOptions([
+          '-preset fast',
+          '-b:v 5M'
+        ]);
+    } else {
+      // Use software encoding
+      command
+        .videoCodec('libx264')
+        .outputOptions([
+          '-preset fast',
+          '-crf 23'
+        ]);
+    }
+    
+    command
+      .outputOptions('-pix_fmt yuv420p')
+      .save(outputPath)
+      .on('end', () => resolve(outputPath))
+      .on('error', reject);
+  });
+}
+```
+
+### Audio Processing Optimization
+
+Optimize audio extraction for faster processing:
+
+```javascript
+async function extractAudioOptimized(videoPath, audioPath) {
+  return new Promise((resolve, reject) => {
+    ffmpeg(videoPath)
+      .noVideo()
+      .audioCodec('pcm_s16le')
+      .audioFrequency(16000)  // TTS models use 16kHz
+      .audioChannels(1)        // Mono is sufficient
+      .outputOptions([
+        '-ar 16000',           // Sample rate
+        '-ac 1',               // Mono
+        '-threads 4'           // Multi-threaded processing
+      ])
+      .save(audioPath)
+      .on('end', () => resolve(audioPath))
+      .on('error', reject);
+  });
+}
+```
+
+## API Optimization
+
+### Request Batching
+
+Batch multiple audio synthesis requests:
+
+```javascript
+class AudioBatcher {
+  constructor(batchSize = 5, delayMs = 1000) {
+    this.batchSize = batchSize;
+    this.delayMs = delayMs;
+    this.queue = [];
+    this.processing = false;
+  }
+
+  async add(text, voiceModel) {
+    return new Promise((resolve, reject) => {
+      this.queue.push({ text, voiceModel, resolve, reject });
+      
+      if (!this.processing) {
+        this.processBatch();
+      }
+    });
+  }
+
+  async processBatch() {
+    if (this.queue.length === 0) {
+      this.processing = false;
+      return;
+    }
+
+    this.processing = true;
+    const batch = this.queue.splice(0, this.batchSize);
+
+    const results = await Promise.allSettled(
+      batch.map(item => synthesizeAudio(item.text, item.voiceModel))
+    );
+
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        batch[index].resolve(result.value);
+      } else {
+        batch[index].reject(result.reason);
+      }
+    });
+
+    // Delay before next batch
+    setTimeout(() => this.processBatch(), this.delayMs);
+  }
+}
+
+const audioBatcher = new AudioBatcher();
+```
+
+### Connection Pooling
+
+Reuse HTTP connections for better performance:
+
+```javascript
+import axios from 'axios';
+import http from 'http';
+import https from 'https';
+
+const httpAgent = new http.Agent({
+  keepAlive: true,
+  maxSockets: 50,
+  maxFreeSockets: 10,
+  timeout: 60000,
+  keepAliveMsecs: 30000
+});
+
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 50,
+  maxFreeSockets: 10,
+  timeout: 60000,
+  keepAliveMsecs: 30000
+});
+
+const api = axios.create({
+  httpAgent,
+  httpsAgent,
+  timeout: 60000
+});
+
+export default api;
+```
+
+### Response Caching
+
+Cache audio synthesis results for repeated text:
+
+```javascript
+import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+
+class AudioCache {
+  constructor(cacheDir) {
+    this.cacheDir = cacheDir;
+    if (!fs.existsSync(cacheDir)) {
+      fs.mkdirSync(cacheDir, { recursive: true });
+    }
+  }
+
+  getCacheKey(text, voiceId) {
+    const hash = crypto.createHash('sha256');
+    hash.update(`${text}:${voiceId}`);
+    return hash.digest('hex');
+  }
+
+  async get(text, voiceId) {
+    const key = this.getCacheKey(text, voiceId);
+    const cachePath = path.join(this.cacheDir, `${key}.wav`);
+    
+    if (fs.existsSync(cachePath)) {
+      return cachePath;
+    }
+    
+    return null;
+  }
+
+  async set(text, voiceId, audioPath) {
+    const key = this.getCacheKey(text, voiceId);
+    const cachePath = path.join(this.cacheDir, `${key}.wav`);
+    
+    fs.copyFileSync(audioPath, cachePath);
+    return cachePath;
+  }
+}
+
+const audioCache = new AudioCache('./cache/audio');
+
+async function synthesizeAudioWithCache(text, voiceModel) {
+  // Check cache first
+  const cached = await audioCache.get(text, voiceModel.id);
+  if (cached) {
+    return cached;
+  }
+
+  // Generate audio
+  const audioPath = await synthesizeAudio(text, voiceModel);
+  
+  // Store in cache
+  await audioCache.set(text, voiceModel.id, audioPath);
+  
+  return audioPath;
+}
+```
+
+## Processing Optimization
+
+### Parallel Task Processing
+
+Process independent tasks in parallel:
+
+```javascript
+async function processVideoRequest(videoRequest) {
+  const startTime = Date.now();
+  
+  // Fetch model and voice data in parallel
+  const [model, voice] = await Promise.all([
+    getModel(videoRequest.modelId),
+    getVoice(videoRequest.voiceId)
+  ]);
+  
+  // Generate audio
+  const audioPath = await synthesizeAudio(
+    videoRequest.text,
+    voice
+  );
+  
+  // Submit video generation
+  const taskCode = await submitVideoGeneration(
+    audioPath,
+    model.videoPath
+  );
+  
+  // Wait for completion
+  const videoPath = await waitForVideo(taskCode);
+  
+  // Calculate metrics in parallel with video duration extraction
+  const [duration] = await Promise.all([
+    getVideoDuration(videoPath),
+    recordMetrics({
+      processingTime: Date.now() - startTime,
+      success: true
+    })
+  ]);
+  
+  return { videoPath, duration };
+}
+```
+
+### Queue Optimization
+
+Implement priority-based queue processing:
+
+```javascript
+class PriorityQueue {
+  constructor() {
+    this.queues = {
+      high: [],
+      normal: [],
+      low: []
+    };
+    this.processing = false;
+  }
+
+  add(videoId, priority = 'normal') {
+    this.queues[priority].push(videoId);
+    updateVideoStatus(videoId, 'waiting');
+    
+    if (!this.processing) {
+      this.processNext();
+    }
+  }
+
+  getNext() {
+    // Process high priority first
+    if (this.queues.high.length > 0) {
+      return this.queues.high.shift();
+    }
+    
+    // Then normal priority
+    if (this.queues.normal.length > 0) {
+      return this.queues.normal.shift();
+    }
+    
+    // Finally low priority
+    if (this.queues.low.length > 0) {
+      return this.queues.low.shift();
+    }
+    
+    return null;
+  }
+
+  async processNext() {
+    const videoId = this.getNext();
+    
+    if (!videoId) {
+      this.processing = false;
+      return;
+    }
+
+    this.processing = true;
+    
+    try {
+      await synthesisVideo(videoId);
+    } catch (error) {
+      console.error('Video synthesis failed:', error);
+    }
+    
+    // Process next
+    this.processNext();
+  }
+
+  getQueueLength() {
+    return (
+      this.queues.high.length +
+      this.queues.normal.length +
+      this.queues.low.length
+    );
+  }
+}
+```
+
+### Polling Optimization
+
+Use adaptive polling intervals:
+
+```javascript
+class AdaptivePoller {
+  constructor(taskCode) {
+    this.taskCode = taskCode;
+    this.intervals = [1000, 2000, 3000, 5000]; // Progressive intervals
+    this.currentIntervalIndex = 0;
+  }
+
+  getNextInterval() {
+    const interval = this.intervals[this.currentIntervalIndex];
+    
+    // Gradually increase interval, max at last value
+    if (this.currentIntervalIndex < this.intervals.length - 1) {
+      this.currentIntervalIndex++;
+    }
+    
+    return interval;
+  }
+
+  async poll() {
+    while (true) {
+      const status = await getVideoStatus(this.taskCode);
+      
+      if (status.code === 10000 && status.data.status === 2) {
+        return { success: true, result: status.data.result };
+      }
+      
+      if (status.code === 10000 && status.data.status === 3) {
+        throw new Error(status.data.msg);
+      }
+      
+      if ([9999, 10002, 10003].includes(status.code)) {
+        throw new Error(status.msg);
+      }
+      
+      // Wait with adaptive interval
+      await new Promise(resolve => 
+        setTimeout(resolve, this.getNextInterval())
+      );
+    }
+  }
+}
+
+// Usage
+const poller = new AdaptivePoller(taskCode);
+const result = await poller.poll();
+```
+
+## Storage Optimization
+
+### Video Compression
+
+Compress generated videos for storage:
+
+```javascript
+async function compressVideo(inputPath, outputPath, quality = 23) {
+  return new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .videoCodec('libx264')
+      .outputOptions([
+        `-crf ${quality}`,      // 18-28 range, 23 is default
+        '-preset medium',        // Encoding speed vs compression
+        '-movflags +faststart'   // Enable streaming
+      ])
+      .save(outputPath)
+      .on('end', () => resolve(outputPath))
+      .on('error', reject);
+  });
+}
+
+// Compress after generation
+async function postProcessVideo(videoPath) {
+  const compressedPath = videoPath.replace('.mp4', '_compressed.mp4');
+  await compressVideo(videoPath, compressedPath, 23);
+  
+  // Replace original with compressed version
+  fs.unlinkSync(videoPath);
+  fs.renameSync(compressedPath, videoPath);
+  
+  return videoPath;
+}
+```
+
+### Database Optimization
+
+Optimize database queries for better performance:
+
+```javascript
+// Use indexes on frequently queried fields
+const createIndexes = `
+  CREATE INDEX IF NOT EXISTS idx_video_status ON videos(status);
+  CREATE INDEX IF NOT EXISTS idx_video_model_id ON videos(model_id);
+  CREATE INDEX IF NOT EXISTS idx_video_created_at ON videos(created_at);
+  CREATE INDEX IF NOT EXISTS idx_model_voice_id ON models(voice_id);
+`;
+
+// Batch updates for better performance
+async function batchUpdateVideoStatus(videoIds, status) {
+  const placeholders = videoIds.map(() => '?').join(',');
+  const query = `
+    UPDATE videos 
+    SET status = ?, updated_at = ? 
+    WHERE id IN (${placeholders})
+  `;
+  
+  return db.run(query, [status, new Date().toISOString(), ...videoIds]);
+}
+```
+
+## Monitoring and Profiling
+
+### Performance Metrics
+
+Track key performance indicators:
+
+```javascript
+class PerformanceMonitor {
+  constructor() {
+    this.metrics = {
+      videoGeneration: {
+        total: 0,
+        successful: 0,
+        failed: 0,
+        averageTime: 0,
+        minTime: Infinity,
+        maxTime: 0
+      },
+      audioSynthesis: {
+        total: 0,
+        averageTime: 0,
+        cacheHits: 0,
+        cacheMisses: 0
+      },
+      queueSize: 0,
+      activeProcessing: 0
+    };
+  }
+
+  recordVideoGeneration(duration, success) {
+    const m = this.metrics.videoGeneration;
+    
+    m.total++;
+    if (success) {
+      m.successful++;
+      m.averageTime = (m.averageTime * (m.successful - 1) + duration) / m.successful;
+      m.minTime = Math.min(m.minTime, duration);
+      m.maxTime = Math.max(m.maxTime, duration);
+    } else {
+      m.failed++;
+    }
+  }
+
+  recordAudioSynthesis(duration, cached) {
+    const m = this.metrics.audioSynthesis;
+    
+    m.total++;
+    if (cached) {
+      m.cacheHits++;
+    } else {
+      m.cacheMisses++;
+      m.averageTime = (m.averageTime * (m.cacheMisses - 1) + duration) / m.cacheMisses;
+    }
+  }
+
+  getMetrics() {
+    return {
+      ...this.metrics,
+      videoGeneration: {
+        ...this.metrics.videoGeneration,
+        successRate: this.metrics.videoGeneration.successful / this.metrics.videoGeneration.total,
+        failureRate: this.metrics.videoGeneration.failed / this.metrics.videoGeneration.total
+      },
+      audioSynthesis: {
+        ...this.metrics.audioSynthesis,
+        cacheHitRate: this.metrics.audioSynthesis.cacheHits / this.metrics.audioSynthesis.total
+      }
+    };
+  }
+}
+
+const monitor = new PerformanceMonitor();
+```
+
+### Resource Usage Tracking
+
+Monitor Docker container resource usage:
+
+```javascript
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
+
+async function getContainerStats(containerName) {
+  try {
+    const { stdout } = await execAsync(
+      `docker stats ${containerName} --no-stream --format "{{json .}}"`
+    );
+    
+    const stats = JSON.parse(stdout);
+    
+    return {
+      cpuPercent: parseFloat(stats.CPUPerc),
+      memUsage: stats.MemUsage,
+      memPercent: parseFloat(stats.MemPerc),
+      netIO: stats.NetIO,
+      blockIO: stats.BlockIO
+    };
+  } catch (error) {
+    console.error('Failed to get container stats:', error);
+    return null;
+  }
+}
+
+async function monitorAllServices() {
+  const containers = [
+    'duix-avatar-tts',
+    'duix-avatar-asr',
+    'duix-avatar-gen-video'
+  ];
+
+  const stats = await Promise.all(
+    containers.map(async name => ({
+      name,
+      stats: await getContainerStats(name)
+    }))
+  );
+
+  return stats;
+}
+
+// Run monitoring every 30 seconds
+setInterval(async () => {
+  const stats = await monitorAllServices();
+  console.log('Service Stats:', JSON.stringify(stats, null, 2));
+}, 30000);
+```
+
+## Hardware-Specific Optimizations
+
+### RTX 4070 (Recommended Configuration)
+
+```yaml
+services:
+  duix-avatar-gen-video:
+    environment:
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+    shm_size: '8g'
+    deploy:
+      resources:
+        limits:
+          memory: 20G
+        reservations:
+          memory: 16G
+```
+
+### RTX 4090 (High-End Configuration)
+
+```yaml
+services:
+  duix-avatar-gen-video:
+    environment:
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:1024
+    shm_size: '16g'
+    deploy:
+      resources:
+        limits:
+          memory: 32G
+        reservations:
+          memory: 24G
+```
+
+### RTX 5090 (Cutting-Edge Configuration)
+
+```yaml
+services:
+  duix-avatar-gen-video:
+    image: guiji2025/duix.avatar:cuda12.8
+    environment:
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:1024
+    shm_size: '16g'
+    deploy:
+      resources:
+        limits:
+          memory: 48G
+        reservations:
+          memory: 32G
+```
+
+<Tip>
+  Higher-end GPUs benefit from larger CUDA split sizes and shared memory allocations. Adjust based on your available resources.
+</Tip>
+
+## Benchmarking
+
+Create benchmark tests to measure performance:
+
+```javascript
+async function benchmarkVideoGeneration(iterations = 10) {
+  const results = [];
+  
+  for (let i = 0; i < iterations; i++) {
+    const startTime = Date.now();
+    
+    try {
+      await generateTestVideo();
+      results.push({
+        iteration: i + 1,
+        duration: Date.now() - startTime,
+        success: true
+      });
+    } catch (error) {
+      results.push({
+        iteration: i + 1,
+        duration: Date.now() - startTime,
+        success: false,
+        error: error.message
+      });
+    }
+  }
+  
+  const successful = results.filter(r => r.success);
+  const avgTime = successful.reduce((sum, r) => sum + r.duration, 0) / successful.length;
+  
+  return {
+    totalIterations: iterations,
+    successfulIterations: successful.length,
+    averageTime: avgTime,
+    minTime: Math.min(...successful.map(r => r.duration)),
+    maxTime: Math.max(...successful.map(r => r.duration)),
+    results
+  };
+}
+```
+
+## Next Steps
+
+<Card title="Integration Guide" icon="plug" href="/advanced/integration">
+  Learn how to integrate Duix Avatar into your applications
+</Card>
+
+<Card title="Best Practices" icon="star" href="/advanced/best-practices">
+  Follow production-ready deployment patterns
+</Card>
+
+<Card title="Troubleshooting" icon="wrench" href="/deployment/troubleshooting">
+  Resolve common performance issues
+</Card>

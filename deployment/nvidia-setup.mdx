@@ -1,0 +1,451 @@
+---
+title: 'NVIDIA Setup'
+description: 'Installing and configuring NVIDIA drivers and container toolkit for Duix Avatar'
+---
+
+## Overview
+
+Duix Avatar requires NVIDIA GPU support for all computational tasks. This guide covers installing NVIDIA drivers and configuring Docker to use your GPU.
+
+<Warning>
+Without proper NVIDIA setup, the Docker services will fail to start. GPU acceleration is mandatory, not optional.
+</Warning>
+
+## NVIDIA Driver Installation
+
+### Windows Driver Setup
+
+<Steps>
+  <Step title="Check Current Driver">
+    Open Command Prompt or PowerShell and run:
+    
+    ```bash
+    nvidia-smi
+    ```
+    
+    If this command displays your GPU information, drivers are already installed. If not, proceed with installation.
+  </Step>
+  
+  <Step title="Download NVIDIA Driver">
+    Visit the official NVIDIA driver download page:
+    
+    **[https://www.nvidia.cn/drivers/lookup/](https://www.nvidia.cn/drivers/lookup/)**
+    
+    Select your GPU details:
+    - Product Type (e.g., GeForce)
+    - Product Series (e.g., GeForce RTX 40 Series)
+    - Product (e.g., GeForce RTX 4070)
+    - Operating System (Windows 10 64-bit or Windows 11)
+    - Driver Type (Game Ready Driver recommended)
+  </Step>
+  
+  <Step title="Install Driver">
+    1. Run the downloaded installer
+    2. Choose "Express Installation" or "Custom Installation"
+    3. Wait for installation to complete
+    4. Restart your computer if prompted
+  </Step>
+  
+  <Step title="Verify Installation">
+    After restarting, open Command Prompt and run:
+    
+    ```bash
+    nvidia-smi
+    ```
+    
+    You should see output similar to:
+    ```
+    +-----------------------------------------------------------------------------------------+
+    | NVIDIA-SMI 560.94       Driver Version: 560.94         CUDA Version: 12.6              |
+    |-----------------------------------------+------------------------+----------------------+
+    | GPU  Name                  Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+    | Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+    |                                         |                        |               MIG M. |
+    |=========================================+========================+======================|
+    |   0  NVIDIA GeForce RTX 4070       Off |   00000000:01:00.0  On |                  N/A |
+    |  0%   45C    P8             15W /  215W |     450MiB /  12288MiB |      2%      Default |
+    |                                         |                        |                  N/A |
+    +-----------------------------------------+------------------------+----------------------+
+    ```
+  </Step>
+</Steps>
+
+<Note>
+Docker Desktop for Windows automatically includes GPU support when NVIDIA drivers are installed. No additional configuration is needed.
+</Note>
+
+### Linux Driver Setup
+
+<Steps>
+  <Step title="Check Current Driver">
+    Open a terminal and run:
+    
+    ```bash
+    nvidia-smi
+    ```
+    
+    If the command is not found or shows errors, you need to install the drivers.
+  </Step>
+  
+  <Step title="Install NVIDIA Driver">
+    Follow the official NVIDIA documentation:
+    
+    **[https://www.nvidia.cn/drivers/lookup/](https://www.nvidia.cn/drivers/lookup/)**
+    
+    For Ubuntu 22.04, you can also use the package manager:
+    
+    ```bash
+    # Update package list
+    sudo apt update
+    
+    # Install recommended driver
+    sudo ubuntu-drivers autoinstall
+    
+    # Or install a specific version
+    sudo apt install nvidia-driver-545
+    ```
+  </Step>
+  
+  <Step title="Reboot System">
+    After driver installation, reboot your system:
+    
+    ```bash
+    sudo reboot
+    ```
+  </Step>
+  
+  <Step title="Verify Installation">
+    After rebooting, verify the driver is working:
+    
+    ```bash
+    nvidia-smi
+    ```
+    
+    The output should display your GPU information and driver version.
+  </Step>
+</Steps>
+
+## NVIDIA Container Toolkit (Linux Only)
+
+<Note>
+This section is **only required for Linux installations**. Windows users with Docker Desktop can skip this section.
+</Note>
+
+The NVIDIA Container Toolkit enables Docker containers to access NVIDIA GPUs.
+
+### Installation Steps
+
+<Steps>
+  <Step title="Add NVIDIA Package Repository">
+    Configure the repository for NVIDIA Container Toolkit:
+    
+    ```bash
+    distribution=$(. /etc/os-release;echo $ID$VERSION_ID) \
+      && curl -s -L https://nvidia.github.io/libnvidia-container/gpgkey | sudo apt-key add - \
+      && curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+    ```
+  </Step>
+  
+  <Step title="Update Package List">
+    ```bash
+    sudo apt-get update
+    ```
+  </Step>
+  
+  <Step title="Install NVIDIA Container Toolkit">
+    ```bash
+    sudo apt-get install -y nvidia-container-toolkit
+    ```
+  </Step>
+  
+  <Step title="Configure Docker Runtime">
+    Configure Docker to use the NVIDIA runtime:
+    
+    ```bash
+    sudo nvidia-ctk runtime configure --runtime=docker
+    ```
+    
+    This command modifies `/etc/docker/daemon.json` to add NVIDIA runtime support.
+  </Step>
+  
+  <Step title="Restart Docker Service">
+    Apply the configuration changes:
+    
+    ```bash
+    sudo systemctl restart docker
+    ```
+  </Step>
+  
+  <Step title="Verify Installation">
+    Test GPU access from Docker:
+    
+    ```bash
+    sudo docker run --rm --runtime=nvidia --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi
+    ```
+    
+    This should display your GPU information from within a Docker container.
+  </Step>
+</Steps>
+
+### Troubleshooting Container Toolkit
+
+<AccordionGroup>
+  <Accordion title="Error: 'nvidia' runtime not found">
+    This means the Docker daemon hasn't loaded the NVIDIA runtime configuration.
+    
+    **Solution:**
+    ```bash
+    # Verify daemon.json configuration
+    cat /etc/docker/daemon.json
+    
+    # Should contain:
+    {
+        "runtimes": {
+            "nvidia": {
+                "path": "nvidia-container-runtime",
+                "runtimeArgs": []
+            }
+        }
+    }
+    
+    # Restart Docker
+    sudo systemctl restart docker
+    ```
+  </Accordion>
+  
+  <Accordion title="Error: could not select device driver">
+    The NVIDIA kernel modules are not loaded.
+    
+    **Solution:**
+    ```bash
+    # Load NVIDIA modules
+    sudo modprobe nvidia
+    sudo modprobe nvidia-uvm
+    
+    # Verify modules are loaded
+    lsmod | grep nvidia
+    ```
+  </Accordion>
+  
+  <Accordion title="Permission denied errors">
+    Your user needs permission to access Docker.
+    
+    **Solution:**
+    ```bash
+    # Add user to docker group
+    sudo usermod -aG docker $USER
+    
+    # Log out and log back in for changes to take effect
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Docker Compose GPU Configuration
+
+Duix Avatar's Docker Compose files are pre-configured for GPU access. Here's what the configuration looks like:
+
+<CodeGroup>
+```yaml Windows
+services:
+  duix-avatar-gen-video:
+    image: guiji2025/duix.avatar
+    runtime: nvidia
+    environment:
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+```
+
+```yaml Linux
+services:
+  duix-avatar-gen-video:
+    image: guiji2025/duix.avatar
+    runtime: nvidia
+    privileged: true
+    environment:
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+```
+</CodeGroup>
+
+### Key Configuration Elements
+
+<AccordionGroup>
+  <Accordion title="runtime: nvidia">
+    Specifies that the container should use the NVIDIA container runtime, enabling GPU access.
+  </Accordion>
+  
+  <Accordion title="PYTORCH_CUDA_ALLOC_CONF">
+    Configures PyTorch's CUDA memory allocation:
+    - `max_split_size_mb:512` - Limits memory fragmentation
+    - Prevents out-of-memory errors on GPUs with limited VRAM
+  </Accordion>
+  
+  <Accordion title="deploy.resources.reservations">
+    Reserves GPU resources for the container:
+    - `capabilities: [gpu]` - Grants GPU access
+    - `count: all` - Allocates all available GPUs
+  </Accordion>
+  
+  <Accordion title="NVIDIA_VISIBLE_DEVICES">
+    Controls which GPUs are visible to the container:
+    - `0` - Use first GPU only
+    - `all` - Use all available GPUs
+    - `0,1` - Use specific GPUs
+  </Accordion>
+</AccordionGroup>
+
+## Special GPU Configurations
+
+### NVIDIA RTX 50 Series Setup
+
+<Note>
+RTX 5090 and other 50 series cards have been tested and verified with Duix Avatar. Special Docker images are required.
+</Note>
+
+For RTX 50 series GPUs:
+
+1. **Use dedicated compose file:**
+   ```bash
+   docker-compose -f docker-compose-5090.yml up -d
+   ```
+
+2. **Special images used:**
+   - `guiji2025/fish-speech-5090` - TTS service with CUDA 12.8
+   - `guiji2025/duix.avatar-5090` - Video generation with PyTorch preview
+
+3. **Configuration:**
+   ```yaml
+   services:
+     duix-avatar-tts:
+       image: guiji2025/fish-speech-5090
+       runtime: nvidia
+       environment:
+         - NVIDIA_VISIBLE_DEVICES=0
+         - NVIDIA_DRIVER_CAPABILITIES=compute,graphics,utility,video,display
+   ```
+
+<Warning>
+The RTX 50 series configuration also works for RTX 30/40 series with CUDA 12.8, but it's not required for those cards.
+</Warning>
+
+### Multi-GPU Configuration
+
+If you have multiple GPUs and want to distribute workload:
+
+```yaml
+services:
+  duix-avatar-gen-video:
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0  # Use first GPU
+  
+  duix-avatar-tts:
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=1  # Use second GPU
+  
+  duix-avatar-asr:
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=1  # Share second GPU
+```
+
+## Verifying GPU Access
+
+After starting Duix Avatar services, verify GPU access:
+
+<Tabs>
+  <Tab title="Check nvidia-smi">
+    ```bash
+    nvidia-smi
+    ```
+    
+    You should see Docker processes using GPU memory:
+    ```
+    +-----------------------------------------------------------------------------------------+
+    | Processes:                                                                              |
+    |  GPU   GI   CI        PID   Type   Process name                              GPU Memory |
+    |        ID   ID                                                               Usage      |
+    |=========================================================================================|
+    |    0   N/A  N/A      1234      C   python                                      2048MiB |
+    |    0   N/A  N/A      5678      C   python                                      4096MiB |
+    +-----------------------------------------------------------------------------------------+
+    ```
+  </Tab>
+  
+  <Tab title="Check Docker Logs">
+    ```bash
+    docker logs duix-avatar-gen-video
+    ```
+    
+    Look for GPU initialization messages:
+    ```
+    CUDA is available: True
+    GPU: NVIDIA GeForce RTX 4070
+    CUDA Version: 12.1
+    ```
+  </Tab>
+  
+  <Tab title="Check Service Status">
+    <Tabs>
+      <Tab title="Windows">
+        Open Docker Desktop and verify all three services show "Running" status.
+      </Tab>
+      <Tab title="Linux">
+        ```bash
+        docker ps
+        ```
+        
+        All three containers should be "Up" with healthy status.
+      </Tab>
+    </Tabs>
+  </Tab>
+</Tabs>
+
+## Performance Optimization
+
+### Memory Management
+
+Optimize GPU memory usage:
+
+<CodeGroup>
+```yaml Reduce Memory Fragmentation
+environment:
+  - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+  - CUDA_LAUNCH_BLOCKING=1
+```
+
+```yaml Increase Shared Memory
+shm_size: '8g'  # Increase if you have more RAM
+```
+</CodeGroup>
+
+### Driver Recommendations
+
+| GPU Series | Recommended Driver Version |
+|------------|---------------------------|
+| RTX 30 Series | 545.xx or higher |
+| RTX 40 Series | 545.xx or higher |
+| RTX 50 Series | 560.xx or higher (CUDA 12.8) |
+
+<Note>
+Always use the latest stable driver for your GPU model for best performance and compatibility.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Docker Setup" icon="docker" href="/deployment/docker-setup">
+    Complete the Docker installation and start services
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/deployment/troubleshooting">
+    Common GPU and driver issues
+  </Card>
+</CardGroup>

@@ -1,0 +1,177 @@
+---
+title: 'Frequently Asked Questions'
+description: 'Common questions and troubleshooting for Duix Avatar'
+icon: 'circle-question'
+---
+
+## Self-Check Steps Before Asking Questions
+
+Before reporting an issue, please complete these diagnostic steps:
+
+<AccordionGroup>
+  <Accordion title="1. Check Service Status">
+    Verify that all three Docker services are in **Running** status:
+
+    ![Service Status](https://raw.githubusercontent.com/duixcom/Duix.Avatar/main/README.assets/9.png)
+
+    All services must be running for the application to function properly.
+  </Accordion>
+
+  <Accordion title="2. Confirm NVIDIA Graphics Card">
+    Confirm that your machine has an NVIDIA graphics card and drivers are correctly installed.
+
+    <Note>
+      All computing power for this project is local. The three services won't start without an NVIDIA graphics card or proper drivers.
+    </Note>
+
+    Run the following command to verify:
+    ```bash
+    nvidia-smi
+    ```
+
+    If the command returns your GPU information, drivers are installed correctly.
+  </Accordion>
+
+  <Accordion title="3. Update to Latest Version">
+    Ensure both server and client are updated to the latest version. The project is newly open-sourced, the community is very active, and updates are frequent. Your issue might have been resolved in a new version.
+
+    **Update Server:**
+    ```bash
+    cd /deploy
+    docker-compose up -d
+    ```
+
+    **Update Client:**
+    - Pull the latest code from GitHub
+    - Rebuild the application
+  </Accordion>
+
+  <Accordion title="4. Search Existing Issues">
+    [GitHub Issues](https://github.com/duixcom/Duix.Avatar/issues) are continuously updated, issues are being resolved and closed daily. Check frequently - your issue might already be resolved.
+
+    Search existing issues before creating a new one to avoid duplicates.
+  </Accordion>
+</AccordionGroup>
+
+## Getting Help
+
+If you've completed the self-check steps above and still need assistance, follow this question template:
+
+### Question Template
+
+<Card title="1. Problem Description" icon="file-lines">
+  Describe the reproduction steps in detail, with screenshots if possible.
+
+  Include:
+  - What you were trying to do
+  - What you expected to happen
+  - What actually happened
+  - Steps to reproduce the issue
+</Card>
+
+<Card title="2. Provide Error Logs" icon="bug">
+  **Client Logs:**
+
+  ![Client Logs Location](https://raw.githubusercontent.com/duixcom/Duix.Avatar/main/README.assets/4.jpeg)
+
+  **Server Logs:**
+
+  Find the key location, or click on the Docker services, and "Copy" as shown below:
+
+  ![Server Logs](https://raw.githubusercontent.com/duixcom/Duix.Avatar/main/README.assets/15.png)
+</Card>
+
+## Common Questions
+
+<AccordionGroup>
+  <Accordion title="Why aren't my Docker services starting?">
+    This is usually caused by one of the following:
+
+    1. **Missing NVIDIA GPU** - This project requires an NVIDIA graphics card
+    2. **Missing NVIDIA drivers** - Install drivers from [NVIDIA's official site](https://www.nvidia.cn/drivers/lookup/)
+    3. **Insufficient disk space** - Ensure you have at least 100GB free on C: drive and 30GB on D: drive (Windows)
+    4. **Docker not configured properly** - On Windows, ensure WSL 2 is installed and updated
+
+    <Note>
+      Run `nvidia-smi` to verify your GPU is detected. If this command fails, your drivers are not installed correctly.
+    </Note>
+  </Accordion>
+
+  <Accordion title="How do I know if the installation is complete?">
+    You should see three services running in Docker Desktop (or one service if using the lite version):
+
+    - `guiji2025/fun-asr`
+    - `guiji2025/fish-speech-ziming`
+    - `guiji2025/duix.avatar`
+
+    The initial download takes approximately 30 minutes and consumes about 70GB of bandwidth.
+  </Accordion>
+
+  <Accordion title="Can I run Duix Avatar without a GPU?">
+    No, an NVIDIA GPU is required. All AI processing happens locally on your GPU. Without a compatible NVIDIA graphics card, the Docker services will not start.
+
+    **Recommended GPU:** RTX 4070 or better
+    **Minimum Requirements:** Check the [system requirements](/deployment/system-requirements) page
+  </Accordion>
+
+  <Accordion title="What's the difference between the full and lite versions?">
+    - **Full Version**: Includes all three services (ASR, TTS, video synthesis) for complete functionality
+    - **Lite Version**: Single service deployment with reduced features but lower system requirements
+
+    To use the lite version:
+    ```bash
+    docker-compose -f docker-compose-lite.yml up -d
+    ```
+  </Accordion>
+
+  <Accordion title="How do I update to the latest version?">
+    **Server Update:**
+    ```bash
+    cd /deploy
+    docker-compose down
+    docker-compose pull
+    docker-compose up -d
+    ```
+
+    **Client Update:**
+    Download the latest release from [GitHub Releases](https://github.com/duixcom/Duix.Avatar/releases)
+  </Accordion>
+
+  <Accordion title="Does Duix Avatar support real-time interaction?">
+    Duix Avatar is designed for digital human cloning and non-real-time video synthesis.
+
+    If you want a digital human to support real-time interaction, you can visit [duix.com](https://www.duix.com) to experience the free test of interactive digital humans.
+  </Accordion>
+
+  <Accordion title="What languages are supported for scripts?">
+    Duix Avatar supports eight languages:
+
+    - English
+    - Japanese
+    - Korean
+    - Chinese
+    - French
+    - German
+    - Arabic
+    - Spanish
+  </Accordion>
+
+  <Accordion title="Can I use this commercially?">
+    Yes! Duix Avatar supports global free commercial use with one condition:
+
+    <Note>
+      Enterprises with more than 100,000 users or annual revenue exceeding $10 million USD need to sign a commercial license agreement.
+    </Note>
+
+    For commercial API services with enterprise-level SLA, visit the [DUIX Platform](https://docs.duix.com/api-reference/api/Introduction).
+  </Accordion>
+</AccordionGroup>
+
+## Still Need Help?
+
+If your question isn't answered here:
+
+1. Check [GitHub Issues](https://github.com/duixcom/Duix.Avatar/issues) for similar problems
+2. Review the [installation guide](/installation/windows) for setup issues
+3. Contact support at **james@duix.com**
+4. Visit the [official website](https://www.duix.com) for additional resources
